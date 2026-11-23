@@ -83,6 +83,8 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "preview.zoomOut",
   "preview.resetZoom",
   "preview.find",
+  // g3code: toggles annotation mode in the browser.
+  "preview.annotate",
   "commandPalette.toggle",
   "filePicker.toggle",
   "projectSearch.toggle",

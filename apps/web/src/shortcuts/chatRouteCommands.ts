@@ -193,6 +193,7 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
         claim(event);
         dispatchPreviewAction("find");
       },
+      "preview.annotate": previewCommand("annotate"),
     },
     {
       when: () =>

@@ -70,6 +70,7 @@ const PREVIEW_FORWARDED_COMMANDS = [
   "preview.zoomOut",
   "preview.resetZoom",
   "preview.find",
+  "preview.annotate",
 ] as const;
 
 const isGlobalPullRequests = (ref: ScopedThreadRef) =>

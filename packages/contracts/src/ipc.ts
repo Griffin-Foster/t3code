@@ -1326,9 +1326,26 @@ export const DesktopPreviewAnnotationVoiceStateSchema = Schema.Struct({
 export type DesktopPreviewAnnotationVoiceState =
   typeof DesktopPreviewAnnotationVoiceStateSchema.Type;
 
+/**
+ * g3code: a numbered marker for an earlier annotation on the page, shown while annotation mode
+ * is on (like the ChatGPT app). Placed on the element its selector finds, else at `rect`.
+ */
+export const PreviewAnnotationMarkerSchema = Schema.Struct({
+  id: Schema.String.check(Schema.isMaxLength(128)),
+  label: Schema.String.check(Schema.isMaxLength(8)),
+  /** The page the annotation was made on; markers only show on that page. */
+  pageUrl: Schema.String.check(Schema.isMaxLength(8192)),
+  selector: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))),
+  rect: PreviewAnnotationRectSchema,
+});
+export type PreviewAnnotationMarker = typeof PreviewAnnotationMarkerSchema.Type;
+
 export const DesktopPreviewPickElementInputSchema = Schema.Struct({
   tabId: DesktopPreviewTabIdSchema,
   voice: Schema.optional(DesktopPreviewAnnotationVoiceConfigSchema),
+  markers: Schema.optional(
+    Schema.Array(PreviewAnnotationMarkerSchema).check(Schema.isMaxLength(200)),
+  ),
 });
 
 export interface DesktopPreviewBridge {
@@ -1397,6 +1414,7 @@ export interface DesktopPreviewBridge {
   pickElement: (
     tabId: string,
     voice?: DesktopPreviewAnnotationVoiceConfig,
+    markers?: ReadonlyArray<PreviewAnnotationMarker>,
   ) => Promise<PreviewAnnotationSubmissionResult | null>;
   cancelPickElement: (tabId: string) => Promise<void>;
   captureScreenshot: (

@@ -3,7 +3,10 @@ import { m } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
-import type { DesktopPreviewAnnotationVoiceConfig } from "@t3tools/contracts";
+import type {
+  DesktopPreviewAnnotationVoiceConfig,
+  PreviewAnnotationMarker,
+} from "@t3tools/contracts";
 import { previewStreamDownloadUrl } from "@t3tools/client-runtime/preview/server-browser-stream";
 import {
   isAtomCommandInterrupted,
@@ -821,6 +824,44 @@ export function PreviewView({
     );
   };
 
+  // g3code: annotation mode, like the ChatGPT app. While it is on, each annotation re-arms the
+  // pick for the next one and earlier annotations show as numbered markers on the page. Cmd+Shift+.
+  // or the toolbar button toggles it; Esc in the page or sending with Cmd+Enter ends it.
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const annotationModeRef = useRef(false);
+  const setAnnotationModeOn = (on: boolean) => {
+    annotationModeRef.current = on;
+    setAnnotationMode(on);
+  };
+  const annotationMarkers = (): PreviewAnnotationMarker[] =>
+    (useComposerDraftStore.getState().getComposerDraft(threadRef)?.previewAnnotations ?? []).map(
+      (annotation, index) => {
+        const element = annotation.elements[0];
+        return {
+          id: annotation.id,
+          label: String(index + 1),
+          pageUrl: annotation.pageUrl,
+          selector: element?.element.selector ?? null,
+          rect: element?.rect ??
+            annotation.regions[0]?.rect ??
+            annotation.strokes[0]?.bounds ?? { x: 0, y: 0, width: 0, height: 0 },
+        };
+      },
+    );
+  const toggleAnnotationMode = () => {
+    if (!previewBridge || !runtimeTabId) return;
+    if (annotationModeRef.current || pickActiveRef.current) {
+      setAnnotationModeOn(false);
+      if (pickActiveRef.current) {
+        pickActiveRef.current.cancelled = true;
+        void previewBridge.cancelPickElement(runtimeTabId).catch(() => undefined);
+      }
+      return;
+    }
+    setAnnotationModeOn(true);
+    handlePickElement();
+  };
+
   const handlePickElement = () => {
     if (!previewBridge || !runtimeTabId) return;
     if (pickActiveRef.current) {
@@ -872,8 +913,12 @@ export function PreviewView({
       // Main's WebContents.focus() cannot move the embedder's DOM focus into a guest, so key
       // presses would stay in the app; only focusing the <webview> element hands them to the page.
       focusPreviewWebview(runtimeTabId);
-      const result = await bridge.pickElement(runtimeTabId, voice);
-      if (!result || pickRequest.cancelled) return;
+      const result = await bridge.pickElement(runtimeTabId, voice, annotationMarkers());
+      if (!result || pickRequest.cancelled) {
+        // Dismissed in the page (Esc or closing the overlay): leave annotation mode.
+        if (!pickRequest.cancelled) setAnnotationModeOn(false);
+        return;
+      }
       // The accepted pick must survive further clicks, tab changes, and unmount; stop cancellation here.
       if (pickActiveRef.current === pickRequest) {
         pickActiveRef.current = null;
@@ -919,8 +964,15 @@ export function PreviewView({
         readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope)
       ) {
         onSendAnnotation?.(annotation, image);
+        // Sending the annotations ends the session.
+        setAnnotationModeOn(false);
       }
-    }).then(finishPick);
+    })
+      .then(finishPick)
+      .then(() => {
+        // Still in annotation mode: arm the next pick, now with this annotation's marker.
+        if (annotationModeRef.current && !pickRequest.cancelled) handlePickElement();
+      });
   };
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tells the preview bridge whether an element pick may send annotations
@@ -934,6 +986,8 @@ export function PreviewView({
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- cancels an in-progress element pick on the preview bridge when the tab changes or on unmount
   useEffect(() => {
     return () => {
+      annotationModeRef.current = false;
+      setAnnotationMode(false);
       if (!pickActiveRef.current) return;
       pickActiveRef.current.cancelled = true;
       pickActiveRef.current = null;
@@ -973,6 +1027,9 @@ export function PreviewView({
         case "find":
           handleFind();
           return;
+        case "annotate":
+          toggleAnnotationMode();
+          return;
         case "toggle-panel":
           return;
       }
@@ -990,6 +1047,7 @@ export function PreviewView({
       if (action === "preview.zoomOut") onPreviewAction("zoom-out");
       if (action === "preview.resetZoom") onPreviewAction("reset-zoom");
       if (action === "preview.find") onPreviewAction("find");
+      if (action === "preview.annotate") onPreviewAction("annotate");
     });
     return () => {
       unsubscribeAction();
@@ -1063,8 +1121,8 @@ export function PreviewView({
         pictureInPictureDisabled={
           isUnreachable || (!isServerTab && !desktopOverlay?.hasWebContents)
         }
-        onPickElement={previewBridge && tabId && !isServerTab ? handlePickElement : undefined}
-        pickActive={pickActive}
+        onPickElement={previewBridge && tabId && !isServerTab ? toggleAnnotationMode : undefined}
+        pickActive={pickActive || annotationMode}
         pickDisabled={!tabId || isUnreachable}
         pickDisabledReason={
           isUnreachable

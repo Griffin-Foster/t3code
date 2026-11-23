@@ -474,9 +474,9 @@ const pickElement = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_PICK_ELEMENT_CHANNEL,
   payload: DesktopPreviewPickElementInputSchema,
   result: Schema.NullOr(PreviewAnnotationSubmissionResultSchema),
-  handler: Effect.fn("desktop.ipc.preview.pickElement")(function* ({ tabId, voice }) {
+  handler: Effect.fn("desktop.ipc.preview.pickElement")(function* ({ tabId, voice, markers }) {
     const manager = yield* PreviewManager.PreviewManager;
-    return yield* manager.pickElement(tabId, voice);
+    return yield* manager.pickElement(tabId, voice, markers);
   }),
 });
 

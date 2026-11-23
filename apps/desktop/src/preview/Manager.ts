@@ -9,6 +9,7 @@ import {
 import type {
   DesktopPreviewAnnotationTheme,
   DesktopPreviewAnnotationVoiceConfig,
+  PreviewAnnotationMarker,
   DesktopPreviewAnnotationVoiceState,
   DesktopPreviewColorScheme,
   DesktopPreviewFavicon,
@@ -2341,6 +2342,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   const pickElement = Effect.fn("PreviewManager.pickElement")(function* (
     tabId: string,
     voice?: DesktopPreviewAnnotationVoiceConfig,
+    markers?: ReadonlyArray<PreviewAnnotationMarker>,
   ) {
     const wc = yield* requireWebContents(tabId);
     yield* cancelPickElement(tabId);
@@ -2509,6 +2511,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
               annotationTheme,
               annotationSendEnabled.get(tabId) === true,
               voice,
+              markers,
             );
           });
         });
@@ -4017,6 +4020,7 @@ export class PreviewManager extends Context.Service<
     readonly pickElement: (
       tabId: string,
       voice?: DesktopPreviewAnnotationVoiceConfig,
+      markers?: ReadonlyArray<PreviewAnnotationMarker>,
     ) => Effect.Effect<PreviewAnnotationSubmissionResult | null, PreviewManagerError>;
     readonly updateAnnotationVoice: (
       state: DesktopPreviewAnnotationVoiceState,

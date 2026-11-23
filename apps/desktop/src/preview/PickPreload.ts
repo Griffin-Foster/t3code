@@ -15,6 +15,7 @@ import type {
   PreviewAnnotationStrokeTarget,
   PreviewAnnotationStyleChange,
   PreviewAnnotationSubmission,
+  PreviewAnnotationMarker,
 } from "@t3tools/contracts";
 
 import { createAnnotationIdSource } from "./AnnotationIds.ts";
@@ -568,9 +569,77 @@ function createUnitInput(unit: string, placeholder = "0"): HTMLInputElement {
   return input;
 }
 
+/**
+ * g3code: numbered speech-bubble markers on earlier annotations, like the ChatGPT app's. Each
+ * bubble's point sits on its element's top-left corner; positions follow scrolls and resizes.
+ */
+function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>) {
+  const element = document.createElement("div");
+  element.setAttribute(OVERLAY_ATTRIBUTE, "");
+  element.style.cssText = "position:fixed;inset:0;pointer-events:none;overflow:hidden";
+  const samePage = (url: string): boolean => {
+    try {
+      const a = new URL(url);
+      const b = new URL(window.location.href);
+      return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
+    } catch {
+      return false;
+    }
+  };
+  const items = markers
+    .filter((marker) => samePage(marker.pageUrl))
+    .map((marker) => {
+      const bubble = document.createElement("div");
+      bubble.setAttribute(OVERLAY_ATTRIBUTE, "");
+      bubble.textContent = marker.label;
+      bubble.style.cssText = [
+        "position:absolute",
+        "left:0",
+        "top:0",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+        "min-width:24px",
+        "height:24px",
+        "padding:0 6px",
+        "box-sizing:border-box",
+        "border-radius:12px 12px 12px 3px",
+        "background:#2f7ef6",
+        "color:#fff",
+        "font:600 12px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif",
+        "box-shadow:0 0 0 1.5px rgb(255 255 255 / 0.85),0 2px 6px rgb(0 0 0 / 0.35)",
+        "will-change:transform",
+      ].join(";");
+      element.appendChild(bubble);
+      return { marker, bubble };
+    });
+  const position = (): void => {
+    for (const { marker, bubble } of items) {
+      let rect = marker.rect;
+      if (marker.selector) {
+        try {
+          const target = document.querySelector(marker.selector);
+          if (target) {
+            const box = target.getBoundingClientRect();
+            rect = { x: box.x, y: box.y, width: box.width, height: box.height };
+          }
+        } catch {
+          // An invalid selector falls back to the rect captured with the annotation.
+        }
+      }
+      const x = Math.min(Math.max(rect.x - 3, 2), window.innerWidth - 28);
+      const y = Math.min(Math.max(rect.y - 22, 2), window.innerHeight - 26);
+      bubble.style.transform = `translate(${x}px, ${y}px)`;
+    }
+  };
+  position();
+  return { element, position };
+}
+
 function startAnnotation(
   sendEnabled: boolean,
   voice: DesktopPreviewAnnotationVoiceConfig | undefined,
+  markers: ReadonlyArray<PreviewAnnotationMarker> = [],
 ): void {
   activeSession?.teardown(false);
   let finished = false;
@@ -601,7 +670,8 @@ function startAnnotation(
 
   const hoverOutline = createBox(PRIMARY, PRIMARY_FILL);
   const marqueeBox = createBox(PRIMARY, PRIMARY_FILL);
-  root.append(hoverOutline, marqueeBox);
+  const markerLayer = createAnnotationMarkers(markers);
+  root.append(markerLayer.element, hoverOutline, marqueeBox);
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute(OVERLAY_ATTRIBUTE, "");
@@ -1412,6 +1482,7 @@ function startAnnotation(
 
   const repaint = (): void => {
     for (const target of selected.values()) updateSelectedVisual(target);
+    markerLayer.position();
     queueEditorLayout();
   };
   const onScroll = (): void => {
@@ -1892,9 +1963,10 @@ ipcRenderer.on(
     theme: DesktopPreviewAnnotationTheme | undefined,
     sendEnabled?: boolean,
     voice?: DesktopPreviewAnnotationVoiceConfig,
+    markers?: ReadonlyArray<PreviewAnnotationMarker>,
   ) => {
     if (theme) annotationTheme = theme;
-    startAnnotation(sendEnabled === true, voice);
+    startAnnotation(sendEnabled === true, voice, markers ?? []);
   },
 );
 ipcRenderer.on(ANNOTATION_SEND_ENABLED_CHANNEL, (_event, enabled: boolean) => {
