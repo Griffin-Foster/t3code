@@ -203,6 +203,7 @@ import {
   resolveChatCanvasModel,
   selectCanvasMeasurements,
 } from "./chat/canvasStore";
+import { MaximizedChatModeControl, useMaximizedChatLayout } from "./chat/MaximizedChat";
 import { usePreviewSession } from "./preview/usePreviewSession";
 import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
 
@@ -1215,6 +1216,8 @@ export default function ChatView(props: ChatViewProps) {
   const rightPanelMaximized =
     !embedded && canMaximizeRightPanel && rightPanelState.maximized === true;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
+  // g3code: keeps the chat usable (sidebar or floating) while the panel is maximized.
+  const maximizedChatLayout = useMaximizedChatLayout(rightPanelMaximized, workspaceLayoutElement);
   const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
   const [chatCanvasStore] = useState(createChatCanvasStore);
 
@@ -3532,6 +3535,11 @@ export default function ChatView(props: ChatViewProps) {
       maximized={rightPanelMaximized}
       onToggleMaximized={toggleRightPanelMaximizedStable}
     >
+      {rightPanelMaximized ? (
+        <span className="mr-1 flex">
+          <MaximizedChatModeControl />
+        </span>
+      ) : null}
       {panelToggleControls}
     </WorkspaceTitlebarControls>
   );
@@ -3544,7 +3552,11 @@ export default function ChatView(props: ChatViewProps) {
   const content = (
     <div
       ref={setWorkspaceLayoutElement}
-      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+        // g3code: with the chat docked on the left, the panel's tab bar no longer needs the traffic-light inset.
+        maximizedChatLayout.mode === "sidebar" && "[&_[data-right-panel-tabbar]]:pl-2!",
+      )}
     >
       {embedded ? null : (
         <DeviceSetupDialogHost
@@ -3557,18 +3569,21 @@ export default function ChatView(props: ChatViewProps) {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
-          rightPanelMaximized ? "w-0 flex-none" : "flex-1",
+          maximizedChatLayout.className,
         )}
-        data-chat-column-maximized-away={rightPanelMaximized ? "true" : "false"}
-        data-chat-column
         style={
           {
+            ...maximizedChatLayout.style,
             "--chat-header-height": embedded ? "0px" : "var(--workspace-topbar-height)",
           } as CSSProperties
         }
-        inert={rightPanelMaximized}
+        data-chat-column-maximized-away={maximizedChatLayout.away ? "true" : "false"}
+        data-maximized-chat-mode={maximizedChatLayout.mode ?? undefined}
+        data-chat-column
+        inert={maximizedChatLayout.away}
         onMouseUp={preventMiddleClickPasteOutsideEditable}
       >
+        {maximizedChatLayout.chrome}
         {embedded ? null : (
           <header
             ref={threadPanelPopoverAnchorRef}
