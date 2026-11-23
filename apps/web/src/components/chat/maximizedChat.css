@@ -35,3 +35,53 @@
   [data-active-tab]:nth-of-type(n + 9)::after {
   content: none;
 }
+
+/*
+ * g3code: transitions for the tabbed workspace. Each runs when the chat enters a mode (the
+ * attribute starts matching), and only for people who haven't asked for reduced motion.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-chat-column][data-maximized-chat-mode="chat-tab"] {
+    animation: g3-fade-in 160ms ease-out;
+  }
+
+  [data-chat-column][data-maximized-chat-mode="sidebar"] {
+    animation: g3-slide-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  [data-chat-column][data-maximized-chat-mode="floating"] {
+    animation: g3-pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transform-origin: bottom right;
+  }
+
+  [data-g3-new-tab] {
+    animation: g3-rise-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+@keyframes g3-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes g3-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@keyframes g3-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+@keyframes g3-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}

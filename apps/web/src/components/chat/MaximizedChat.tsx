@@ -187,6 +187,10 @@ export interface MaximizedChatLayout extends ChatColumnLayout {
   readonly rootClassName: string | undefined;
 }
 
+// The Chat tab's header sits in the tab bar row, right-aligned before the window controls.
+const CHAT_TAB_HEADER_CLASSES =
+  "[&>[data-chat-header]]:absolute! [&>[data-chat-header]]:-top-[var(--workspace-topbar-height)] [&>[data-chat-header]]:right-20 [&>[data-chat-header]]:max-w-1/2 [&>[data-chat-header]]:bg-transparent! [&>[data-chat-header]]:pl-3! [&>[data-chat-header]]:pr-11!";
+
 // While the Chat tab is selected, no panel tab should look selected.
 const CHAT_TAB_ROOT_CLASSES =
   "[&_[data-right-panel-tab-list]_[data-active-tab=true]]:bg-transparent! [&_[data-right-panel-tab-list]_[data-active-tab=true]]:text-muted-foreground!";
@@ -368,8 +372,12 @@ export function useMaximizedChatLayout({
       return {
         mode: "chat-tab",
         // Covers the panel's content below its tab bar; the panel stays mounted underneath.
-        className:
-          "absolute inset-x-0 top-[var(--workspace-topbar-height)] bottom-0 z-30 bg-background [&_[data-chat-header]]:pl-4!",
+        // The chat's title row moves up into the empty right side of the tab bar, so the Chat
+        // tab has a single header row like the Codex app.
+        className: cn(
+          "absolute inset-x-0 top-[var(--workspace-topbar-height)] bottom-0 z-30 bg-background overflow-visible!",
+          CHAT_TAB_HEADER_CLASSES,
+        ),
         style: undefined,
         away: false,
         onPointerDown: undefined,
@@ -496,6 +504,9 @@ export function useMaximizedChatLayout({
       mode,
       className: cn(
         "absolute z-40 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl",
+        // Minimize/expand and window-resize changes glide; a drag follows the pointer exactly.
+        liveFloatingRect === null &&
+          "transition-[height,width,left,bottom] duration-200 ease-out motion-reduce:transition-none",
         // The chat header is a window drag region in the desktop app; over the panel it must not be.
         "[-webkit-app-region:no-drag] [&_.drag-region]:[-webkit-app-region:no-drag]!",
         "[&_[data-chat-header]]:cursor-grab",

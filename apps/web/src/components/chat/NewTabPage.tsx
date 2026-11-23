@@ -122,7 +122,7 @@ export function NewTabPage({
   };
 
   return (
-    <div className="scrollbar-gutter-both flex h-full min-h-0 overflow-y-auto">
+    <div data-g3-new-tab className="scrollbar-gutter-both flex h-full min-h-0 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-6 pt-40 pb-10">
         <form onSubmit={submit}>
           <label className="flex h-11 items-center gap-2.5 rounded-full border border-border bg-muted/40 px-4 text-sm focus-within:border-ring">

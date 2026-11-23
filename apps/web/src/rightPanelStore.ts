@@ -280,7 +280,8 @@ const EMPTY_THREAD_STATE: ThreadRightPanelState = {
 };
 
 const DEFAULT_THREAD_PANEL_VISIBILITY: ThreadPanelVisibility = {
-  inlineOpen: true,
+  // g3code: thread details start closed for a cleaner thread; its header button opens them.
+  inlineOpen: false,
   popoverOpen: false,
 };
 
