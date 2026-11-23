@@ -928,6 +928,8 @@ export interface PreviewAnnotationPayload {
   styleChanges: ReadonlyArray<PreviewAnnotationStyleChange>;
   screenshot: PreviewAnnotationScreenshot | null;
   createdAt: string;
+  /** g3code: where the annotation was clicked, as an offset from its first target's top-left. */
+  anchor?: PreviewAnnotationPoint;
 }
 
 export const PreviewAnnotationPayloadSchema: Schema.Codec<PreviewAnnotationPayload> = Schema.Struct(
@@ -942,6 +944,7 @@ export const PreviewAnnotationPayloadSchema: Schema.Codec<PreviewAnnotationPaylo
     styleChanges: Schema.Array(PreviewAnnotationStyleChangeSchema),
     screenshot: Schema.NullOr(PreviewAnnotationScreenshotSchema),
     createdAt: Schema.String,
+    anchor: Schema.optionalKey(PreviewAnnotationPointSchema),
   },
 );
 
@@ -1337,6 +1340,8 @@ export const PreviewAnnotationMarkerSchema = Schema.Struct({
   pageUrl: Schema.String.check(Schema.isMaxLength(8192)),
   selector: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))),
   rect: PreviewAnnotationRectSchema,
+  /** Where on the target the annotation was clicked (offset from its top-left). */
+  offset: Schema.optional(PreviewAnnotationPointSchema),
 });
 export type PreviewAnnotationMarker = typeof PreviewAnnotationMarkerSchema.Type;
 

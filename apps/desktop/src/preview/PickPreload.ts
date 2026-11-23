@@ -569,9 +569,43 @@ function createUnitInput(unit: string, placeholder = "0"): HTMLInputElement {
   return input;
 }
 
+/** A numbered speech-bubble marker (rounded, its point at the bottom-left), like ChatGPT's. */
+function createMarkerBubble(label: string): HTMLDivElement {
+  const bubble = document.createElement("div");
+  bubble.setAttribute(OVERLAY_ATTRIBUTE, "");
+  bubble.textContent = label;
+  bubble.style.cssText = [
+    "position:absolute",
+    "left:0",
+    "top:0",
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "min-width:24px",
+    "height:24px",
+    "padding:0 6px",
+    "box-sizing:border-box",
+    "border-radius:12px 12px 12px 3px",
+    "background:#2f7ef6",
+    "color:#fff",
+    "font:600 12px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif",
+    "box-shadow:0 0 0 1.5px rgb(255 255 255 / 0.85),0 2px 6px rgb(0 0 0 / 0.35)",
+    "will-change:transform",
+  ].join(";");
+  return bubble;
+}
+
+/** Puts a marker bubble's point (its bottom-left corner) on `point`, kept inside the viewport. */
+function placeMarkerBubble(bubble: HTMLElement, point: PreviewAnnotationPoint): void {
+  const x = Math.min(Math.max(point.x, 2), window.innerWidth - 28);
+  const y = Math.min(Math.max(point.y - 24, 2), window.innerHeight - 26);
+  bubble.style.transform = `translate(${x}px, ${y}px)`;
+}
+
 /**
  * g3code: numbered speech-bubble markers on earlier annotations, like the ChatGPT app's. Each
- * bubble's point sits on its element's top-left corner; positions follow scrolls and resizes.
+ * bubble's point sits where the annotation was clicked (an offset from its element, re-found by
+ * selector), so markers follow scrolls and resizes.
  */
 function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>) {
   const element = document.createElement("div");
@@ -589,27 +623,7 @@ function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>
   const items = markers
     .filter((marker) => samePage(marker.pageUrl))
     .map((marker) => {
-      const bubble = document.createElement("div");
-      bubble.setAttribute(OVERLAY_ATTRIBUTE, "");
-      bubble.textContent = marker.label;
-      bubble.style.cssText = [
-        "position:absolute",
-        "left:0",
-        "top:0",
-        "display:flex",
-        "align-items:center",
-        "justify-content:center",
-        "min-width:24px",
-        "height:24px",
-        "padding:0 6px",
-        "box-sizing:border-box",
-        "border-radius:12px 12px 12px 3px",
-        "background:#2f7ef6",
-        "color:#fff",
-        "font:600 12px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif",
-        "box-shadow:0 0 0 1.5px rgb(255 255 255 / 0.85),0 2px 6px rgb(0 0 0 / 0.35)",
-        "will-change:transform",
-      ].join(";");
+      const bubble = createMarkerBubble(marker.label);
       element.appendChild(bubble);
       return { marker, bubble };
     });
@@ -627,9 +641,12 @@ function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>
           // An invalid selector falls back to the rect captured with the annotation.
         }
       }
-      const x = Math.min(Math.max(rect.x - 3, 2), window.innerWidth - 28);
-      const y = Math.min(Math.max(rect.y - 22, 2), window.innerHeight - 26);
-      bubble.style.transform = `translate(${x}px, ${y}px)`;
+      placeMarkerBubble(
+        bubble,
+        marker.offset
+          ? { x: rect.x + marker.offset.x, y: rect.y + marker.offset.y }
+          : { x: rect.x + 3, y: rect.y + 2 },
+      );
     }
   };
   position();
@@ -987,6 +1004,34 @@ function startAnnotation(
   let pendingCapture = false;
   let editorExpanded = false;
   let editorWasShown = false;
+  // g3code: where this annotation was clicked. The comment box and a pending numbered bubble sit
+  // there, and the point is saved as an offset from the first target so its marker follows it.
+  let clickPoint: PreviewAnnotationPoint | null = null;
+  let clickOffset: PreviewAnnotationPoint | null = null;
+  const pendingBubble = createMarkerBubble(String(markers.length + 1));
+  pendingBubble.style.display = "none";
+  markerLayer.element.appendChild(pendingBubble);
+  const hasAnyTargets = (): boolean =>
+    selected.size > 0 || regions.length > 0 || strokes.length > 0;
+  const primaryTargetRect = (): PreviewAnnotationRect | null => {
+    const first = selected.values().next().value;
+    if (first) {
+      return first.element.isConnected
+        ? rectFromDomRect(first.element.getBoundingClientRect())
+        : first.rect;
+    }
+    return regions[0]?.rect ?? strokes[0]?.bounds ?? null;
+  };
+  const pendingAnchor = (): PreviewAnnotationPoint | null => {
+    const rect = primaryTargetRect();
+    if (!rect || !clickOffset) return clickPoint;
+    return { x: rect.x + clickOffset.x, y: rect.y + clickOffset.y };
+  };
+  const placePendingBubble = (): void => {
+    const anchor = hasAnyTargets() ? pendingAnchor() : null;
+    pendingBubble.style.display = anchor ? "flex" : "none";
+    if (anchor) placeMarkerBubble(pendingBubble, anchor);
+  };
   let editorPosition: { left: number; top: number } | null = null;
   let editorDrag: { pointerId: number; offsetX: number; offsetY: number } | null = null;
   let editorLayoutFrame: number | null = null;
@@ -1006,6 +1051,17 @@ function startAnnotation(
 
   const updateStatus = (): void => {
     const hasTargets = selected.size > 0 || regions.length > 0 || strokes.length > 0;
+    if (hasTargets && clickPoint && !clickOffset) {
+      const rect = primaryTargetRect();
+      if (rect) clickOffset = { x: clickPoint.x - rect.x, y: clickPoint.y - rect.y };
+    }
+    if (!hasTargets) {
+      // The next annotation starts fresh: new click point, and its comment box takes focus.
+      clickPoint = null;
+      clickOffset = null;
+      editorWasShown = false;
+    }
+    placePendingBubble();
     if (!hasTargets && voiceBusy) {
       pendingVoiceSubmission = null;
       sendVoice("cancel");
@@ -1381,6 +1437,24 @@ function startAnnotation(
     );
 
   const positionCompactEditor = (): void => {
+    const anchor = pendingAnchor();
+    if (anchor) {
+      // g3code: beside the clicked spot and its bubble, like the ChatGPT app.
+      const editorRect = editor.getBoundingClientRect();
+      const anchorCandidates = [
+        { left: anchor.x + 34, top: anchor.y - 26 },
+        { left: anchor.x - editorRect.width - 8, top: anchor.y - 26 },
+        { left: anchor.x + 34, top: anchor.y - editorRect.height },
+        { left: anchor.x - editorRect.width - 8, top: anchor.y - editorRect.height },
+      ];
+      const fits = (position: { left: number; top: number }): boolean =>
+        position.left >= 8 &&
+        position.top >= 8 &&
+        position.left + editorRect.width <= window.innerWidth - 8 &&
+        position.top + editorRect.height <= window.innerHeight - 8;
+      applyEditorPosition(anchorCandidates.find(fits) ?? anchorCandidates[0]!);
+      return;
+    }
     const bounds = getAnnotationBounds();
     if (!bounds) return;
     const editorRect = editor.getBoundingClientRect();
@@ -1483,6 +1557,7 @@ function startAnnotation(
   const repaint = (): void => {
     for (const target of selected.values()) updateSelectedVisual(target);
     markerLayer.position();
+    placePendingBubble();
     queueEditorLayout();
   };
   const onScroll = (): void => {
@@ -1611,6 +1686,7 @@ function startAnnotation(
     if (event.button !== 0 || isAnnotationNode(event.target as Element)) return;
     event.preventDefault();
     event.stopPropagation();
+    if (tool !== "erase" && !hasAnyTargets()) clickPoint = { x: event.clientX, y: event.clientY };
     if (tool === "select") {
       const target = pickFromPoint(event.clientX, event.clientY);
       if (target) toggleSelected(target, event.shiftKey);
@@ -1814,7 +1890,8 @@ function startAnnotation(
     if (event.key === "Escape" && !event.isComposing) {
       event.preventDefault();
       event.stopPropagation();
-      teardown(true);
+      if (hasAnyTargets() || comment.value.trim() !== "") resetCurrentAnnotation();
+      else teardown(true);
       return;
     }
     if (shadowRoot.activeElement?.matches("input, textarea, select")) return;
@@ -1824,6 +1901,20 @@ function startAnnotation(
     else if (event.key === "e") tool = "erase";
     else return;
     refreshToolButtons();
+  };
+
+  // g3code: Esc with an annotation in progress drops just that annotation and stays in the mode.
+  const resetCurrentAnnotation = (): void => {
+    for (const target of Array.from(selected.values())) removeSelected(target);
+    for (const region of regions.splice(0)) {
+      root.querySelector(`[data-region-id="${region.id}"]`)?.remove();
+    }
+    for (const stroke of strokes.splice(0)) {
+      svg.querySelector(`[data-stroke-id="${stroke.id}"]`)?.remove();
+    }
+    comment.value = "";
+    resizeComment();
+    updateStatus();
   };
 
   const submitAnnotation = (submission: PreviewAnnotationSubmission): void => {
@@ -1879,6 +1970,7 @@ function startAnnotation(
           styleChanges: submittedStyleChanges,
           screenshot: null,
           createdAt: new Date().toISOString(),
+          ...(clickOffset ? { anchor: clickOffset } : {}),
         };
         editor.style.display = "none";
         toolbar.style.display = "none";

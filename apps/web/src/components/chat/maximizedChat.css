@@ -303,25 +303,24 @@
 /*
  * g3code: in the floating chat card, the message box is the card's own bottom bar rather than
  * a rounded box inside it, like the ChatGPT app. Full width, no surface of its own, one divider.
- * The checkout/branch row under it stays on the Chat tab. A new thread's centered box keeps its
- * own look.
+ * The checkout/branch row under it stays on the Chat tab.
  */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero]) .chat-composer-lane {
+[data-chat-column][data-maximized-chat-mode="floating"] .chat-composer-lane {
   padding-inline: 0 !important;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   :is([data-chat-composer-stack], [data-chat-composer-form], [data-slot="composer-shell"]) {
   max-width: none !important;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   [data-slot="composer-shell"]
   > div:not([data-slot]) {
   display: none;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   :is(
     [data-slot="composer-host"],
     [data-chat-composer-surface],
@@ -332,18 +331,16 @@
   box-shadow: none !important;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-composer-main-surface] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-composer-main-surface] {
   border-top: 1px solid var(--border);
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-composer-main-surface]::after {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-composer-main-surface]::after {
   display: none !important;
 }
 
 /* The bar sits flush with the card's bottom edge: drop the bottom spacer meant for full-height chats. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   [data-chat-composer-stack]
   div:has(> [data-slot="composer-shell"])
   ~ div[aria-hidden] {
@@ -386,26 +383,23 @@
 }
 
 /* Divider above the message bar: quieter than a regular border. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-composer-main-surface] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-composer-main-surface] {
   border-top-color: rgb(255 255 255 / 0.08);
 }
 
 /* One row: the footer's items join the input's row. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-composer-surface] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-composer-surface] {
   display: flex;
   align-items: flex-end;
   gap: 4px;
   padding: 6px 10px 6px 8px;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-composer-footer] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-composer-footer] {
   display: contents;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   [data-chat-composer-footer]
   > div:first-child {
   order: -1;
@@ -415,8 +409,7 @@
   margin: 0;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-composer-body] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-composer-body] {
   order: 0;
   flex: 1 1 auto;
   min-width: 0;
@@ -424,13 +417,11 @@
   padding: 4.5px 4px;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-composer-rich-text] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-composer-rich-text] {
   min-height: 0 !important;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-composer-actions="right"] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-composer-actions="right"] {
   order: 1;
   flex: 0 0 auto;
   height: 32px;
@@ -439,15 +430,14 @@
 }
 
 /* Model picker as an icon-only button, like the app's settings control. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   [data-chat-provider-model-picker]
   > span
   > :not(:first-child) {
   display: none;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-provider-model-picker] {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-provider-model-picker] {
   width: 32px;
   height: 32px;
   min-width: 0;
@@ -456,15 +446,13 @@
   border-color: transparent;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [data-chat-provider-model-picker]
-  > span {
+[data-chat-column][data-maximized-chat-mode="floating"] [data-chat-provider-model-picker] > span {
   flex: none;
   justify-content: center;
 }
 
 /* Same round 32px hover target for +, model and mic, so icons and hover fills line up. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   :is(
     [aria-label="Attach files"],
     [data-chat-provider-model-picker],
@@ -478,7 +466,7 @@
   color: var(--muted-foreground);
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   :is(
     [aria-label="Attach files"],
     [data-chat-provider-model-picker],
@@ -489,14 +477,11 @@
 }
 
 /* Attach as a plus. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [aria-label="Attach files"]
-  svg {
+[data-chat-column][data-maximized-chat-mode="floating"] [aria-label="Attach files"] svg {
   display: none;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  [aria-label="Attach files"]::before {
+[data-chat-column][data-maximized-chat-mode="floating"] [aria-label="Attach files"]::before {
   content: "";
   /* Centered in the button regardless of the button's other (hidden) children. */
   position: absolute;
@@ -511,8 +496,7 @@
 }
 
 /* Send as a white circle. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  button[type="submit"] {
+[data-chat-column][data-maximized-chat-mode="floating"] button[type="submit"] {
   width: 28px;
   height: 28px;
   background: var(--foreground) !important;
@@ -520,8 +504,7 @@
   box-shadow: none !important;
 }
 
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
-  button[type="submit"]:disabled {
+[data-chat-column][data-maximized-chat-mode="floating"] button[type="submit"]:disabled {
   opacity: 0.55;
 }
 
@@ -532,7 +515,7 @@
 }
 
 /* Keep the placeholder on the one-row bar's single line. */
-[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+[data-chat-column][data-maximized-chat-mode="floating"]
   [data-chat-composer-body]
   [class*="text-placeholder"] {
   overflow: hidden;
@@ -543,4 +526,21 @@
 /* One surface: the message list region paints its own (darker) background otherwise. */
 [data-chat-column][data-maximized-chat-mode="floating"] [data-workspace-area] {
   background: transparent;
+}
+
+/*
+ * A new thread centers its message box under a large "What should we build?" heading. In the
+ * floating card the box is the card's bottom bar like any other thread, so dock it and drop the
+ * heading.
+ */
+[data-chat-column][data-maximized-chat-mode="floating"][data-draft-hero]
+  [data-chat-composer-overlay] {
+  align-items: flex-end;
+  padding-bottom: 0;
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"][data-draft-hero]
+  [data-chat-composer-stack]
+  > div:has(h1) {
+  display: none;
 }

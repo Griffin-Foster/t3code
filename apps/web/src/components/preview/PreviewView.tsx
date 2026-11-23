@@ -842,6 +842,7 @@ export function PreviewView({
           label: String(index + 1),
           pageUrl: annotation.pageUrl,
           selector: element?.element.selector ?? null,
+          ...(annotation.anchor ? { offset: annotation.anchor } : {}),
           rect: element?.rect ??
             annotation.regions[0]?.rect ??
             annotation.strokes[0]?.bounds ?? { x: 0, y: 0, width: 0, height: 0 },
@@ -893,6 +894,8 @@ export function PreviewView({
       }
       if (
         (isCurrentPick || submitted) &&
+        // Between annotations in annotation mode, focus stays in the page for the next one.
+        !annotationModeRef.current &&
         previouslyFocused &&
         previouslyFocused.isConnected &&
         typeof previouslyFocused.focus === "function"
