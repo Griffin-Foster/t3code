@@ -30,9 +30,13 @@ import {
   type FloatingChatRect,
   type FloatingChatState,
   type MaximizedChatMode,
+  type FloatingChatAnchor,
+  FLOATING_CHAT_MARGIN,
+  anchoredFloatingRect,
   clampFloatingRect,
   clampSidebarWidth,
-  defaultFloatingRect,
+  defaultFloatingSize,
+  nearestFloatingAnchor,
   useMaximizedChatStore,
 } from "./maximizedChatStore";
 
@@ -42,7 +46,8 @@ import {
  * a floating card. Kept in its own files so upstream updates to ChatView rarely conflict.
  */
 
-type ResizeEdge = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
+// The card rests on the bottom edge, so it resizes from the top and sides only.
+type ResizeEdge = "n" | "e" | "w" | "ne" | "nw";
 
 const FLOATING_RESIZE_EDGES: ReadonlyArray<{
   edge: ResizeEdge;
@@ -50,14 +55,23 @@ const FLOATING_RESIZE_EDGES: ReadonlyArray<{
   className: string;
 }> = [
   { edge: "n", cursor: "ns-resize", className: "top-0 right-3 left-3 h-1.5" },
-  { edge: "s", cursor: "ns-resize", className: "right-3 bottom-0 left-3 h-1.5" },
   { edge: "e", cursor: "ew-resize", className: "top-3 right-0 bottom-3 w-1.5" },
   { edge: "w", cursor: "ew-resize", className: "top-3 bottom-3 left-0 w-1.5" },
   { edge: "nw", cursor: "nwse-resize", className: "top-0 left-0 size-3" },
   { edge: "ne", cursor: "nesw-resize", className: "top-0 right-0 size-3" },
-  { edge: "sw", cursor: "nesw-resize", className: "bottom-0 left-0 size-3" },
-  { edge: "se", cursor: "nwse-resize", className: "right-0 bottom-0 size-3" },
 ];
+
+const BUBBLE_SIZE = 40;
+const CARD_CLOSE_MS = 180;
+const CARD_OPEN_MS = 280;
+// A light overshoot for the snap, like the ChatGPT app; open/minimize glide without bounce.
+const CARD_TRANSITION =
+  "left 420ms cubic-bezier(0.34, 1.36, 0.64, 1), bottom 420ms cubic-bezier(0.34, 1.36, 0.64, 1), width 220ms ease-out, height 220ms ease-out";
+const ANCHOR_ORIGIN: Record<FloatingChatAnchor, string> = {
+  "bottom-left": "bottom left",
+  "bottom-center": "bottom center",
+  "bottom-right": "bottom right",
+};
 
 /** Header clicks on these start their own action instead of dragging the floating chat. */
 const INTERACTIVE_SELECTOR =
@@ -151,7 +165,6 @@ function usePointerDrag() {
 function resizeRect(rect: FloatingChatRect, edge: ResizeEdge, dx: number, dy: number) {
   let { x, y, width, height } = rect;
   if (edge.includes("e")) width += dx;
-  if (edge.includes("s")) height += dy;
   if (edge.includes("w")) {
     x += dx;
     width -= dx;
@@ -251,7 +264,15 @@ export function useMaximizedChatLayout({
   const mode = useMaximizedChatStore((state) => state.mode);
   const storedSidebarWidth = useMaximizedChatStore((state) => state.sidebarWidth);
   const storedFloatingRect = useMaximizedChatStore((state) => state.floatingRect);
+  const floatingAnchor = useMaximizedChatStore((state) => state.floatingAnchor);
   const floatingState = useMaximizedChatStore((state) => state.floatingState);
+  // The card shrinking into its bubble, or growing back out of it.
+  // "opened" keeps the finished grow-out animation applied, so the card's generic pop-in
+  // (for tab switches) doesn't replay right after it.
+  const [cardMotion, setCardMotion] = useState<"closing" | "opening" | "opened" | null>(null);
+  const cardMotionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears a pending close/open animation timer on unmount
+  useEffect(() => () => clearTimeout(cardMotionTimer.current ?? undefined), []);
   const {
     width: containerWidth,
     height: containerHeight,
@@ -463,21 +484,27 @@ export function useMaximizedChatLayout({
       };
     }
 
-    const rect = clampFloatingRect(
-      liveFloatingRect ??
-        storedFloatingRect ??
-        defaultFloatingRect(containerWidth, containerHeight),
+    // The card rests at one of three bottom anchors; while dragged it follows the pointer, and on
+    // release it springs to the nearest anchor, like the ChatGPT app's floating chat.
+    const restingRect = anchoredFloatingRect(
+      storedFloatingRect ?? defaultFloatingSize(containerWidth, containerHeight),
+      floatingAnchor,
       containerWidth,
       containerHeight,
       topbarHeight,
     );
-    const commitFloatingRect = () => {
-      const live = liveFloatingRectRef.current;
-      if (live !== null) useMaximizedChatStore.getState().setFloatingRect(live);
-      setLiveFloatingRect(null);
-    };
+    const rect = liveFloatingRect ?? restingRect;
     const setFloatingState = (next: FloatingChatState) =>
       useMaximizedChatStore.getState().setFloatingState(next);
+    const settle = () => {
+      const live = liveFloatingRectRef.current;
+      if (live !== null) {
+        const store = useMaximizedChatStore.getState();
+        store.setFloatingRect(live);
+        store.setFloatingAnchor(nearestFloatingAnchor(live, containerWidth));
+      }
+      setLiveFloatingRect(null);
+    };
     const startMove = (event: ReactPointerEvent) => {
       drag.start(
         event,
@@ -485,14 +512,14 @@ export function useMaximizedChatLayout({
         (dx, dy) =>
           setLiveFloatingRect(
             clampFloatingRect(
-              { ...rect, x: rect.x + dx, y: rect.y + dy },
+              { ...restingRect, x: restingRect.x + dx, y: restingRect.y + dy },
               containerWidth,
               containerHeight,
               topbarHeight,
             ),
           ),
         (moved) => {
-          commitFloatingRect();
+          settle();
           // Like the ChatGPT app: a click on the header (not a drag) minimizes or reopens.
           if (!moved) setFloatingState(floatingState === "open" ? "minimized" : "open");
         },
@@ -505,13 +532,13 @@ export function useMaximizedChatLayout({
         (dx, dy) =>
           setLiveFloatingRect(
             clampFloatingRect(
-              resizeRect(rect, edge, dx, dy),
+              resizeRect(restingRect, edge, dx, dy),
               containerWidth,
               containerHeight,
               topbarHeight,
             ),
           ),
-        commitFloatingRect,
+        settle,
       );
     };
     const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
@@ -519,13 +546,42 @@ export function useMaximizedChatLayout({
       if (!target.closest("[data-chat-header]") || target.closest(INTERACTIVE_SELECTOR)) return;
       startMove(event);
     };
-    // Anchored by the card's bottom-right, so minimizing and closing keep it in the corner.
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // The card shrinks into the bubble (and grows back out of it) at its anchor.
+    const animateCard = (motion: "closing" | "opening", then?: () => void) => {
+      clearTimeout(cardMotionTimer.current ?? undefined);
+      if (reduceMotion) {
+        then?.();
+        return;
+      }
+      setCardMotion(motion);
+      cardMotionTimer.current = setTimeout(
+        () => {
+          setCardMotion(motion === "opening" ? "opened" : null);
+          then?.();
+        },
+        motion === "closing" ? CARD_CLOSE_MS : CARD_OPEN_MS,
+      );
+    };
+    const close = () => animateCard("closing", () => setFloatingState("closed"));
+    const open = () => {
+      setFloatingState("open");
+      animateCard("opening");
+    };
     const bottom = containerHeight - (rect.y + rect.height);
-    const right = containerWidth - (rect.x + rect.width);
+    const origin = ANCHOR_ORIGIN[floatingAnchor];
     // The message box (plus the card's top and bottom border), right under the header.
     const minimizedHeight = `calc(var(--workspace-topbar-height) + ${composerHeight > 0 ? composerHeight + 2 : 168}px)`;
 
     if (floatingState === "closed") {
+      const bubbleLeft =
+        floatingAnchor === "bottom-left"
+          ? restingRect.x
+          : floatingAnchor === "bottom-center"
+            ? restingRect.x + restingRect.width / 2 - BUBBLE_SIZE / 2
+            : restingRect.x + restingRect.width - BUBBLE_SIZE;
       return {
         mode,
         // Hidden but mounted, so the draft and scroll position survive.
@@ -539,9 +595,9 @@ export function useMaximizedChatLayout({
             type="button"
             data-g3-chat-bubble
             aria-label={gt("Open chat")}
-            onClick={() => setFloatingState("open")}
+            onClick={open}
             className="absolute z-40 flex size-10 cursor-pointer items-center justify-center rounded-full text-foreground/85 transition-colors hover:text-foreground [-webkit-app-region:no-drag]"
-            style={{ right, bottom }}
+            style={{ left: bubbleLeft, bottom: FLOATING_CHAT_MARGIN, transformOrigin: origin }}
           >
             <MessageCircleIcon className="size-4.5" strokeWidth={1.75} />
           </button>
@@ -556,9 +612,6 @@ export function useMaximizedChatLayout({
       className: cn(
         // Surface, corners, edge and shadow come from maximizedChat.css.
         "absolute z-40 overflow-hidden",
-        // State changes and window resizes glide; a drag follows the pointer exactly.
-        liveFloatingRect === null &&
-          "transition-[height,width,left,bottom] duration-200 ease-out motion-reduce:transition-none",
         // The chat header is a window drag region in the desktop app; over the panel it must not be.
         "[-webkit-app-region:no-drag] [&_.drag-region]:[-webkit-app-region:no-drag]!",
         "[&_[data-chat-header]]:cursor-pointer",
@@ -577,6 +630,18 @@ export function useMaximizedChatLayout({
         bottom,
         width: rect.width,
         height: minimized ? minimizedHeight : rect.height,
+        transformOrigin: origin,
+        // While dragged the card follows the pointer exactly; otherwise it springs to its anchor
+        // and glides between open and minimized. (Reduced motion turns this off in the CSS.)
+        transition: liveFloatingRect === null ? CARD_TRANSITION : "none",
+        ...(cardMotion === null
+          ? {}
+          : {
+              animation:
+                cardMotion === "closing"
+                  ? `g3-card-into-bubble ${CARD_CLOSE_MS}ms cubic-bezier(0.4, 0, 1, 1) forwards`
+                  : `g3-card-out-of-bubble ${CARD_OPEN_MS}ms cubic-bezier(0.2, 0.9, 0.3, 1.1)`,
+            }),
       },
       away: false,
       onPointerDown,
@@ -589,12 +654,7 @@ export function useMaximizedChatLayout({
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={closeLabel}
-                    onClick={() => setFloatingState("closed")}
-                  >
+                  <Button variant="ghost" size="icon-sm" aria-label={closeLabel} onClick={close}>
                     <MinusIcon className="size-4" />
                   </Button>
                 }

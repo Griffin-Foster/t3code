@@ -50,14 +50,46 @@
   }
 
   /* Not while closed (inert), so reopening from the bubble pops the card in again. */
-  [data-chat-column][data-maximized-chat-mode="floating"]:not([inert]),
-  [data-g3-chat-bubble] {
+  [data-chat-column][data-maximized-chat-mode="floating"]:not([inert]) {
     animation: g3-pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
     transform-origin: bottom right;
   }
 
   [data-g3-new-tab] {
     animation: g3-rise-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  [data-g3-chat-bubble] {
+    animation: g3-bubble-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  }
+}
+
+/* The floating card's spring and glide are inline styles; reduced motion turns them off. */
+@media (prefers-reduced-motion: reduce) {
+  [data-chat-column][data-maximized-chat-mode="floating"] {
+    transition: none !important;
+  }
+}
+
+/* The card shrinking into the closed bubble, and growing back out of it. */
+@keyframes g3-card-into-bubble {
+  to {
+    opacity: 0;
+    transform: scale(0.12);
+  }
+}
+
+@keyframes g3-card-out-of-bubble {
+  from {
+    opacity: 0;
+    transform: scale(0.12);
+  }
+}
+
+@keyframes g3-bubble-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
   }
 }
 
@@ -184,8 +216,8 @@
   [data-chat-composer-surface] {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
-  padding: 4px 6px 4px 10px;
+  gap: 4px;
+  padding: 6px 10px 6px 8px;
 }
 
 [data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
@@ -197,6 +229,9 @@
   [data-chat-composer-footer]
   > div:first-child {
   order: -1;
+  display: flex;
+  height: 32px;
+  align-items: center;
   margin: 0;
 }
 
@@ -205,7 +240,8 @@
   order: 0;
   flex: 1 1 auto;
   min-width: 0;
-  padding: 6px 6px 5px;
+  min-height: 32px;
+  padding: 4.5px 4px;
 }
 
 [data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
@@ -217,6 +253,8 @@
   [data-chat-composer-actions="right"] {
   order: 1;
   flex: 0 0 auto;
+  height: 32px;
+  align-items: center;
   gap: 2px;
 }
 
@@ -257,8 +295,8 @@
 /* Send as a white circle. */
 [data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
   button[type="submit"] {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   background: var(--foreground) !important;
   color: var(--background) !important;
   box-shadow: none !important;
@@ -282,4 +320,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* One surface: the message list region paints its own (darker) background otherwise. */
+[data-chat-column][data-maximized-chat-mode="floating"] [data-workspace-area] {
+  background: transparent;
 }

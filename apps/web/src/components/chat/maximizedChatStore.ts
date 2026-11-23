@@ -27,15 +27,23 @@ const FLOATING_CHAT_MIN_HEIGHT = 260;
  */
 export type FloatingChatState = "open" | "minimized" | "closed";
 
+/** Where the floating card rests, like the ChatGPT app: it snaps to one of these on release. */
+export type FloatingChatAnchor = "bottom-left" | "bottom-center" | "bottom-right";
+
+/** Gap between a resting card (or bubble) and the layout's edges. */
+export const FLOATING_CHAT_MARGIN = 16;
+
 interface MaximizedChatState {
   mode: MaximizedChatMode;
   sidebarWidth: number;
-  /** Null until first shown, so the default can be placed against the actual layout size. */
+  /** The card's size (its x/y are ignored now that it snaps to an anchor). Null until resized. */
   floatingRect: FloatingChatRect | null;
+  floatingAnchor: FloatingChatAnchor;
   floatingState: FloatingChatState;
   setMode: (mode: MaximizedChatMode) => void;
   setSidebarWidth: (width: number) => void;
   setFloatingRect: (rect: FloatingChatRect) => void;
+  setFloatingAnchor: (anchor: FloatingChatAnchor) => void;
   setFloatingState: (state: FloatingChatState) => void;
 }
 
@@ -46,15 +54,17 @@ export const useMaximizedChatStore = create<MaximizedChatState>()(
       mode: "floating",
       sidebarWidth: 440,
       floatingRect: null,
+      floatingAnchor: "bottom-right",
       floatingState: "open",
       setMode: (mode) => set({ mode, floatingState: "open" }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setFloatingRect: (floatingRect) => set({ floatingRect }),
+      setFloatingAnchor: (floatingAnchor) => set({ floatingAnchor }),
       setFloatingState: (floatingState) => set({ floatingState }),
     }),
     {
       name: "g3code:maximized-chat",
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() =>
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
@@ -69,12 +79,14 @@ export const useMaximizedChatStore = create<MaximizedChatState>()(
           ...rest,
           mode: state.mode === "sidebar" ? "sidebar" : "floating",
           floatingState: floatingCollapsed ? "minimized" : (state.floatingState ?? "open"),
+          floatingAnchor: state.floatingAnchor ?? "bottom-right",
         };
       },
-      partialize: ({ mode, sidebarWidth, floatingRect, floatingState }) => ({
+      partialize: ({ mode, sidebarWidth, floatingRect, floatingAnchor, floatingState }) => ({
         mode,
         sidebarWidth,
         floatingRect,
+        floatingAnchor,
         floatingState,
       }),
     },
@@ -110,19 +122,44 @@ export function clampFloatingRect(
   };
 }
 
-/** Bottom-right corner with a margin, like the Codex app's floating chat. */
-export function defaultFloatingRect(containerWidth: number, containerHeight: number) {
-  const margin = 16;
-  const width = Math.min(440, Math.max(FLOATING_CHAT_MIN_WIDTH, containerWidth * 0.35));
-  const height = Math.min(680, Math.max(FLOATING_CHAT_MIN_HEIGHT, containerHeight * 0.65));
+/** The card's default size: Codex/ChatGPT-like width, most of the layout's height. */
+export function defaultFloatingSize(containerWidth: number, containerHeight: number) {
+  return {
+    width: Math.min(440, Math.max(FLOATING_CHAT_MIN_WIDTH, containerWidth * 0.35)),
+    height: Math.min(680, Math.max(FLOATING_CHAT_MIN_HEIGHT, containerHeight * 0.65)),
+  };
+}
+
+/** Places a card of the given size at its anchor, inside the layout. */
+export function anchoredFloatingRect(
+  size: { readonly width: number; readonly height: number },
+  anchor: FloatingChatAnchor,
+  containerWidth: number,
+  containerHeight: number,
+  minY = 0,
+): FloatingChatRect {
+  const fitted = clampFloatingRect({ ...size, x: 0, y: 0 }, containerWidth, containerHeight, minY);
+  const x =
+    anchor === "bottom-left"
+      ? FLOATING_CHAT_MARGIN
+      : anchor === "bottom-center"
+        ? (containerWidth - fitted.width) / 2
+        : containerWidth - fitted.width - FLOATING_CHAT_MARGIN;
   return clampFloatingRect(
-    {
-      width,
-      height,
-      x: containerWidth - width - margin,
-      y: containerHeight - height - margin,
-    },
+    { ...fitted, x, y: containerHeight - fitted.height - FLOATING_CHAT_MARGIN },
     containerWidth,
     containerHeight,
+    minY,
   );
+}
+
+/** The anchor whose third of the layout the card's center is in. */
+export function nearestFloatingAnchor(
+  rect: FloatingChatRect,
+  containerWidth: number,
+): FloatingChatAnchor {
+  const center = rect.x + rect.width / 2;
+  if (center < containerWidth / 3) return "bottom-left";
+  if (center > (containerWidth * 2) / 3) return "bottom-right";
+  return "bottom-center";
 }
