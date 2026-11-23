@@ -203,7 +203,7 @@ import {
   resolveChatCanvasModel,
   selectCanvasMeasurements,
 } from "./chat/canvasStore";
-import { MaximizedChatModeControl, useMaximizedChatLayout } from "./chat/MaximizedChat";
+import { MaximizedChatViewControl, useMaximizedChatLayout } from "./chat/MaximizedChat";
 import { usePreviewSession } from "./preview/usePreviewSession";
 import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
 
@@ -3537,7 +3537,7 @@ export default function ChatView(props: ChatViewProps) {
     >
       {rightPanelMaximized ? (
         <span className="mr-1 flex">
-          <MaximizedChatModeControl />
+          <MaximizedChatViewControl />
         </span>
       ) : null}
       {panelToggleControls}
@@ -3552,11 +3552,7 @@ export default function ChatView(props: ChatViewProps) {
   const content = (
     <div
       ref={setWorkspaceLayoutElement}
-      className={cn(
-        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
-        // g3code: with the chat docked on the left, the panel's tab bar no longer needs the traffic-light inset.
-        maximizedChatLayout.mode === "sidebar" && "[&_[data-right-panel-tabbar]]:pl-2!",
-      )}
+      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
     >
       {embedded ? null : (
         <DeviceSetupDialogHost
@@ -3581,6 +3577,7 @@ export default function ChatView(props: ChatViewProps) {
         data-maximized-chat-mode={maximizedChatLayout.mode ?? undefined}
         data-chat-column
         inert={maximizedChatLayout.away}
+        onPointerDown={maximizedChatLayout.onPointerDown}
         onMouseUp={preventMiddleClickPasteOutsideEditable}
       >
         {maximizedChatLayout.chrome}

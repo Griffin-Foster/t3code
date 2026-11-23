@@ -1,4 +1,4 @@
-import { MessageSquareOffIcon, PanelLeftIcon, PictureInPicture2 } from "lucide-react";
+import { ChevronUpIcon, ExpandIcon, GripVerticalIcon, MinusIcon, ShrinkIcon } from "lucide-react";
 import { useGT } from "gt-react";
 import {
   type CSSProperties,
@@ -13,7 +13,7 @@ import {
 import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 
-import { Toggle } from "../ui/toggle";
+import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   type FloatingChatRect,
@@ -26,8 +26,8 @@ import {
 
 /*
  * g3code: keeps the chat usable while the right panel (browser, diff, files...) is maximized,
- * either docked as a sidebar or floating over the panel. Kept in its own files so upstream
- * updates to ChatView rarely conflict with it.
+ * modeled on the Codex app: docked on the right of the panel, or "full screen" with the chat as
+ * a floating card. Kept in its own files so upstream updates to ChatView rarely conflict.
  */
 
 type ResizeEdge = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
@@ -46,6 +46,20 @@ const FLOATING_RESIZE_EDGES: ReadonlyArray<{
   { edge: "sw", cursor: "nesw-resize", className: "bottom-0 left-0 size-3" },
   { edge: "se", cursor: "nwse-resize", className: "right-0 bottom-0 size-3" },
 ];
+
+/** Header clicks on these start their own action instead of dragging the floating chat. */
+const INTERACTIVE_SELECTOR =
+  "button, a, input, textarea, select, [role='button'], [role='combobox'], [role='menuitem'], [contenteditable='true']";
+
+/** A pointer that moves less than this is a click, not a drag. */
+const CLICK_SLOP_PX = 3;
+
+// The window's top-right controls float over the docked chat's header; keep its content clear of them.
+const SIDEBAR_HEADER_CLASSES =
+  "[&_[data-chat-header]]:pl-4! [&_[data-chat-header]]:pr-44! [&_[data-chat-header]_[data-workspace-titlebar-controls]]:right-44!";
+// Room for the card's minimize button (left) and drag handle (right) inside the chat header.
+const FLOATING_HEADER_CLASSES =
+  "[&_[data-chat-header]]:pl-11! [&_[data-chat-header]]:pr-10! [&_[data-chat-header]_[data-workspace-titlebar-controls]]:right-9!";
 
 function useElementSize(element: HTMLElement | null) {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -74,17 +88,23 @@ function usePointerDrag() {
     event: ReactPointerEvent,
     dragCursor: string,
     onMove: (dx: number, dy: number) => void,
-    onEnd: () => void,
+    onEnd: (moved: boolean) => void,
   ) => {
     if (event.button !== 0) return;
     event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;
-    const move = (moveEvent: PointerEvent) =>
-      onMove(moveEvent.clientX - startX, moveEvent.clientY - startY);
+    let moved = false;
+    const move = (moveEvent: PointerEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < CLICK_SLOP_PX) return;
+      moved = true;
+      onMove(dx, dy);
+    };
     const end = () => {
       cleanup.current?.();
-      onEnd();
+      onEnd(moved);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
@@ -103,6 +123,7 @@ function usePointerDrag() {
     cursor === null ? null : (
       <div
         aria-hidden
+        data-maximized-chat-chrome
         className="fixed inset-0 z-[1000] [-webkit-app-region:no-drag]"
         style={{ cursor }}
       />
@@ -130,9 +151,11 @@ export interface MaximizedChatLayout {
   readonly mode: MaximizedChatMode | null;
   readonly className: string;
   readonly style: CSSProperties | undefined;
-  /** True only when the chat is hidden, matching upstream's maximized behavior. */
+  /** True while the layout is still being measured and the chat has no room yet. */
   readonly away: boolean;
-  /** Drag bar, resize handles and drag shield, rendered inside the chat column. */
+  /** Starts dragging the floating chat from an empty spot in its header. */
+  readonly onPointerDown: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
+  /** Resize handles, card controls and drag shield, rendered inside the chat column. */
   readonly chrome: ReactNode;
 }
 
@@ -144,6 +167,7 @@ export function useMaximizedChatLayout(
   const mode = useMaximizedChatStore((state) => state.mode);
   const storedSidebarWidth = useMaximizedChatStore((state) => state.sidebarWidth);
   const storedFloatingRect = useMaximizedChatStore((state) => state.floatingRect);
+  const collapsed = useMaximizedChatStore((state) => state.floatingCollapsed);
   const { width: containerWidth, height: containerHeight } = useElementSize(container);
   const drag = usePointerDrag();
   // Live geometry during a drag; committed to the store (and storage) when the drag ends.
@@ -161,14 +185,22 @@ export function useMaximizedChatLayout(
   };
 
   if (!maximized) {
-    return { mode: null, className: "flex-1", style: undefined, away: false, chrome: null };
-  }
-  if (mode === "hidden" || containerWidth === 0) {
     return {
-      mode: "hidden",
+      mode: null,
+      className: "flex-1",
+      style: undefined,
+      away: false,
+      onPointerDown: undefined,
+      chrome: null,
+    };
+  }
+  if (containerWidth === 0) {
+    return {
+      mode,
       className: "w-0 flex-none",
       style: undefined,
       away: true,
+      onPointerDown: undefined,
       chrome: null,
     };
   }
@@ -179,7 +211,8 @@ export function useMaximizedChatLayout(
       drag.start(
         event,
         "col-resize",
-        (dx) => setLiveSidebarWidth(clampSidebarWidth(width + dx, containerWidth)),
+        // The handle is on the left edge, so dragging left widens the chat.
+        (dx) => setLiveSidebarWidth(clampSidebarWidth(width - dx, containerWidth)),
         () => {
           const live = liveSidebarWidthRef.current;
           if (live !== null) useMaximizedChatStore.getState().setSidebarWidth(live);
@@ -189,16 +222,18 @@ export function useMaximizedChatLayout(
     };
     return {
       mode,
-      className: "relative flex-none border-r border-border",
+      // `order-last` moves the chat to the right of the panel without remounting it.
+      className: cn("relative order-last flex-none border-l border-border", SIDEBAR_HEADER_CLASSES),
       style: { width },
       away: false,
+      onPointerDown: undefined,
       chrome: (
         <>
           <div
             role="separator"
             aria-orientation="vertical"
             aria-label={gt("Resize chat sidebar")}
-            className="absolute top-0 -right-1 bottom-0 z-30 w-2 cursor-col-resize [-webkit-app-region:no-drag]"
+            className="absolute top-0 bottom-0 -left-1 z-30 w-2 cursor-col-resize [-webkit-app-region:no-drag]"
             onPointerDown={startResize}
           />
           {drag.shield}
@@ -229,7 +264,11 @@ export function useMaximizedChatLayout(
             containerHeight,
           ),
         ),
-      commitFloatingRect,
+      (moved) => {
+        commitFloatingRect();
+        // A plain click on a minimized card's header opens it again.
+        if (!moved && collapsed) useMaximizedChatStore.getState().setFloatingCollapsed(false);
+      },
     );
   };
   const startResize = (edge: ResizeEdge, cursor: string) => (event: ReactPointerEvent) => {
@@ -243,83 +282,119 @@ export function useMaximizedChatLayout(
       commitFloatingRect,
     );
   };
+  const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    const target = event.target as Element;
+    if (!target.closest("[data-chat-header]") || target.closest(INTERACTIVE_SELECTOR)) return;
+    startMove(event);
+  };
+  const toggleLabel = collapsed ? gt("Expand chat") : gt("Minimize chat");
   return {
     mode,
     className: cn(
-      "absolute z-40 overflow-hidden rounded-xl border border-border bg-background shadow-2xl",
+      "absolute z-40 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl",
       // The chat header is a window drag region in the desktop app; over the panel it must not be.
       "[-webkit-app-region:no-drag] [&_.drag-region]:[-webkit-app-region:no-drag]!",
-      // Drop the title bar inset meant for the window's traffic lights.
-      "[&_[data-chat-header]]:pl-3!",
+      "[&_[data-chat-header]]:cursor-grab",
+      FLOATING_HEADER_CLASSES,
+      // Minimized: only the header shows. Hidden, not unmounted, so the draft and scroll position stay.
+      collapsed && "[&>:not([data-chat-header]):not([data-maximized-chat-chrome])]:invisible",
     ),
-    style: { left: rect.x, top: rect.y, width: rect.width, height: rect.height },
+    // Anchored by its bottom edge, so minimizing to the header keeps it in the corner.
+    style: {
+      left: rect.x,
+      bottom: containerHeight - (rect.y + rect.height),
+      width: rect.width,
+      height: collapsed ? "var(--workspace-topbar-height)" : rect.height,
+    },
     away: false,
+    onPointerDown,
     chrome: (
       <>
         <div
-          className="flex h-4 shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
-          onPointerDown={startMove}
-          aria-label={gt("Drag to move the chat")}
-          role="presentation"
+          data-maximized-chat-chrome
+          className="absolute top-0 left-2 z-40 flex h-[var(--workspace-topbar-height)] items-center"
         >
-          <div className="h-1 w-10 rounded-full bg-muted-foreground/35" />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={toggleLabel}
+                  onClick={() => useMaximizedChatStore.getState().setFloatingCollapsed(!collapsed)}
+                >
+                  {collapsed ? (
+                    <ChevronUpIcon className="size-4" />
+                  ) : (
+                    <MinusIcon className="size-4" />
+                  )}
+                </Button>
+              }
+            />
+            <TooltipPopup side="bottom">{toggleLabel}</TooltipPopup>
+          </Tooltip>
         </div>
-        {FLOATING_RESIZE_EDGES.map(({ edge, cursor, className }) => (
-          <div
-            key={edge}
-            aria-hidden
-            className={cn("absolute z-30", className)}
-            style={{ cursor }}
-            onPointerDown={startResize(edge, cursor)}
-          />
-        ))}
+        <div
+          role="presentation"
+          data-maximized-chat-chrome
+          aria-label={gt("Drag to move the chat")}
+          className="absolute top-0 right-1 z-40 flex h-[var(--workspace-topbar-height)] w-8 cursor-grab items-center justify-center text-muted-foreground active:cursor-grabbing"
+          onPointerDown={startMove}
+        >
+          <GripVerticalIcon className="size-4" />
+        </div>
+        {collapsed
+          ? null
+          : FLOATING_RESIZE_EDGES.map(({ edge, cursor, className }) => (
+              <div
+                key={edge}
+                aria-hidden
+                className={cn("absolute z-30", className)}
+                style={{ cursor }}
+                onPointerDown={startResize(edge, cursor)}
+              />
+            ))}
         {drag.shield}
       </>
     ),
   };
 }
 
-const MODE_OPTIONS: ReadonlyArray<{ mode: MaximizedChatMode; icon: typeof PanelLeftIcon }> = [
-  { mode: "sidebar", icon: PanelLeftIcon },
-  { mode: "floating", icon: PictureInPicture2 },
-  { mode: "hidden", icon: MessageSquareOffIcon },
-];
-
-/** Chooses where the chat goes while the panel is maximized. */
-export const MaximizedChatModeControl = memo(function MaximizedChatModeControl() {
+/** Switches the maximized view between docked chat and full screen with a floating chat. */
+export const MaximizedChatViewControl = memo(function MaximizedChatViewControl() {
   const gt = useGT();
   const mode = useMaximizedChatStore((state) => state.mode);
   const setMode = useMaximizedChatStore((state) => state.setMode);
-  const labels: Record<MaximizedChatMode, string> = {
-    sidebar: gt("Chat in sidebar"),
-    floating: gt("Floating chat"),
-    hidden: gt("Hide chat"),
-  };
+  if (mode === "floating") {
+    return (
+      <Button
+        className="[-webkit-app-region:no-drag]"
+        variant="outline"
+        size="xs"
+        onClick={() => setMode("sidebar")}
+      >
+        <ShrinkIcon />
+        {gt("Exit full screen")}
+      </Button>
+    );
+  }
+  const label = gt("Full screen");
   return (
-    <div
-      className="flex shrink-0 items-center rounded-md border border-border/70 p-px [-webkit-app-region:no-drag]"
-      role="group"
-      aria-label={gt("Chat placement")}
-    >
-      {MODE_OPTIONS.map(({ mode: option, icon: Icon }) => (
-        <Tooltip key={option}>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={mode === option}
-                onPressedChange={() => setMode(option)}
-                aria-label={labels[option]}
-                variant="ghost"
-                size="sm"
-              >
-                <Icon className="size-3.5" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">{labels[option]}</TooltipPopup>
-        </Tooltip>
-      ))}
-    </div>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            className="[-webkit-app-region:no-drag]"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={label}
+            onClick={() => setMode("floating")}
+          >
+            <ExpandIcon className="size-4" />
+          </Button>
+        }
+      />
+      <TooltipPopup side="bottom">{label}</TooltipPopup>
+    </Tooltip>
   );
 });

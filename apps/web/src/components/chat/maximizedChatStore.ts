@@ -4,11 +4,11 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "~/lib/storage";
 
 /**
- * g3code: where the chat goes while the right panel is maximized.
- * `hidden` is upstream's behavior; `sidebar` docks the chat beside the panel;
- * `floating` shows it as a movable, resizable window over the panel.
+ * g3code: where the chat goes while the right panel is maximized, modeled on the Codex app.
+ * `sidebar` docks the chat on the right of the panel; `floating` ("full screen") gives the
+ * panel the whole window and shows the chat as a movable, resizable card over it.
  */
-export type MaximizedChatMode = "hidden" | "sidebar" | "floating";
+export type MaximizedChatMode = "sidebar" | "floating";
 
 export interface FloatingChatRect {
   readonly x: number;
@@ -26,28 +26,43 @@ interface MaximizedChatState {
   sidebarWidth: number;
   /** Null until first shown, so the default can be placed against the actual layout size. */
   floatingRect: FloatingChatRect | null;
+  /** The floating card is minimized to its header. */
+  floatingCollapsed: boolean;
   setMode: (mode: MaximizedChatMode) => void;
   setSidebarWidth: (width: number) => void;
   setFloatingRect: (rect: FloatingChatRect) => void;
+  setFloatingCollapsed: (collapsed: boolean) => void;
 }
 
 export const useMaximizedChatStore = create<MaximizedChatState>()(
   persist(
     (set) => ({
       mode: "sidebar",
-      sidebarWidth: 420,
+      sidebarWidth: 440,
       floatingRect: null,
-      setMode: (mode) => set({ mode }),
+      floatingCollapsed: false,
+      setMode: (mode) => set({ mode, floatingCollapsed: false }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setFloatingRect: (floatingRect) => set({ floatingRect }),
+      setFloatingCollapsed: (floatingCollapsed) => set({ floatingCollapsed }),
     }),
     {
       name: "g3code:maximized-chat",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() =>
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
-      partialize: ({ mode, sidebarWidth, floatingRect }) => ({ mode, sidebarWidth, floatingRect }),
+      // Version 1 also had a "hidden" mode; the card's minimize button replaces it.
+      migrate: (persisted) => {
+        const state = (persisted ?? {}) as Partial<MaximizedChatState> & { mode?: string };
+        return { ...state, mode: state.mode === "floating" ? "floating" : "sidebar" };
+      },
+      partialize: ({ mode, sidebarWidth, floatingRect, floatingCollapsed }) => ({
+        mode,
+        sidebarWidth,
+        floatingRect,
+        floatingCollapsed,
+      }),
     },
   ),
 );
@@ -74,11 +89,11 @@ export function clampFloatingRect(
   };
 }
 
-/** Bottom-right corner with a margin, like a picture-in-picture window. */
+/** Bottom-right corner with a margin, like the Codex app's floating chat. */
 export function defaultFloatingRect(containerWidth: number, containerHeight: number) {
   const margin = 16;
-  const width = Math.min(440, Math.max(FLOATING_CHAT_MIN_WIDTH, containerWidth * 0.35));
-  const height = Math.min(680, Math.max(FLOATING_CHAT_MIN_HEIGHT, containerHeight - margin * 2));
+  const width = Math.min(480, Math.max(FLOATING_CHAT_MIN_WIDTH, containerWidth * 0.35));
+  const height = Math.min(680, Math.max(FLOATING_CHAT_MIN_HEIGHT, containerHeight * 0.65));
   return clampFloatingRect(
     {
       width,
