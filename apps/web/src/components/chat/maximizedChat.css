@@ -435,7 +435,7 @@
   flex: 0 0 auto;
   height: 32px;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
 }
 
 /* Model picker as an icon-only button, like the app's settings control. */
@@ -498,8 +498,13 @@
 [data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
   [aria-label="Attach files"]::before {
   content: "";
+  /* Centered in the button regardless of the button's other (hidden) children. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 16px;
   height: 16px;
+  transform: translate(-50%, -50%);
   background:
     linear-gradient(currentColor, currentColor) center / 16px 1.75px no-repeat,
     linear-gradient(currentColor, currentColor) center / 1.75px 16px no-repeat;
