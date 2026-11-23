@@ -73,19 +73,26 @@ export function clampSidebarWidth(width: number, containerWidth: number): number
   return Math.min(Math.max(width, SIDEBAR_CHAT_MIN_WIDTH), max);
 }
 
-/** Keeps the floating chat inside the layout, shrinking it if the window got smaller. */
+/**
+ * Keeps the floating chat inside the layout, shrinking it if the window got smaller.
+ * `minY` keeps it below the panel's tab bar so the tabs stay reachable.
+ */
 export function clampFloatingRect(
   rect: FloatingChatRect,
   containerWidth: number,
   containerHeight: number,
+  minY = 0,
 ): FloatingChatRect {
   const width = Math.min(Math.max(rect.width, FLOATING_CHAT_MIN_WIDTH), containerWidth);
-  const height = Math.min(Math.max(rect.height, FLOATING_CHAT_MIN_HEIGHT), containerHeight);
+  const height = Math.min(
+    Math.max(rect.height, FLOATING_CHAT_MIN_HEIGHT),
+    Math.max(0, containerHeight - minY),
+  );
   return {
     width,
     height,
     x: Math.min(Math.max(rect.x, 0), Math.max(0, containerWidth - width)),
-    y: Math.min(Math.max(rect.y, 0), Math.max(0, containerHeight - height)),
+    y: Math.min(Math.max(rect.y, minY), Math.max(minY, containerHeight - height)),
   };
 }
 

@@ -203,7 +203,7 @@ import {
   resolveChatCanvasModel,
   selectCanvasMeasurements,
 } from "./chat/canvasStore";
-import { MaximizedChatViewControl, useMaximizedChatLayout } from "./chat/MaximizedChat";
+import { useMaximizedChatLayout } from "./chat/MaximizedChat";
 import { usePreviewSession } from "./preview/usePreviewSession";
 import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
 
@@ -1217,7 +1217,15 @@ export default function ChatView(props: ChatViewProps) {
     !embedded && canMaximizeRightPanel && rightPanelState.maximized === true;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
   // g3code: keeps the chat usable (sidebar or floating) while the panel is maximized.
-  const maximizedChatLayout = useMaximizedChatLayout(rightPanelMaximized, workspaceLayoutElement);
+  const maximizedChatLayout = useMaximizedChatLayout({
+    maximized: rightPanelMaximized,
+    container: workspaceLayoutElement,
+    chatTabAvailable: !embedded && rightPanelOpen && !shouldUsePlanSidebarSheet,
+    activeSurfaceId: renderedRightPanelSurface?.id ?? null,
+    onMaximize: () => {
+      if (activeThreadRef) useRightPanelStore.getState().setMaximized(activeThreadRef, true);
+    },
+  });
   const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
   const [chatCanvasStore] = useState(createChatCanvasStore);
 
@@ -3535,10 +3543,8 @@ export default function ChatView(props: ChatViewProps) {
       maximized={rightPanelMaximized}
       onToggleMaximized={toggleRightPanelMaximizedStable}
     >
-      {rightPanelMaximized ? (
-        <span className="mr-1 flex">
-          <MaximizedChatViewControl />
-        </span>
+      {maximizedChatLayout.viewControl ? (
+        <span className="mr-1 flex">{maximizedChatLayout.viewControl}</span>
       ) : null}
       {panelToggleControls}
     </WorkspaceTitlebarControls>
@@ -3552,7 +3558,10 @@ export default function ChatView(props: ChatViewProps) {
   const content = (
     <div
       ref={setWorkspaceLayoutElement}
-      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+        maximizedChatLayout.rootClassName,
+      )}
     >
       {embedded ? null : (
         <DeviceSetupDialogHost
@@ -4260,6 +4269,7 @@ export default function ChatView(props: ChatViewProps) {
           keybindings={keybindings}
           getShortcutContext={getShortcutContextStable}
           maximized={rightPanelMaximized}
+          leadingTab={maximizedChatLayout.chatTab}
           layoutControls={
             rightPanelOpen ? (
               <div className="mr-px flex items-center gap-1">
