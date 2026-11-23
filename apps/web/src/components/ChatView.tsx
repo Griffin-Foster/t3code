@@ -204,6 +204,7 @@ import {
   selectCanvasMeasurements,
 } from "./chat/canvasStore";
 import { useMaximizedChatLayout } from "./chat/MaximizedChat";
+import { usePublishNewTabActions } from "./chat/NewTabPage";
 import { usePreviewSession } from "./preview/usePreviewSession";
 import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
 
@@ -1235,6 +1236,8 @@ export default function ChatView(props: ChatViewProps) {
     onMaximize: () => {
       if (activeThreadRef) useRightPanelStore.getState().setMaximized(activeThreadRef, true);
     },
+    // A new tab is a blank browser tab, which shows the New tab page.
+    onNewTab: () => createBrowserSurface(),
     onActivateSurface: (surfaceId) => {
       if (activeThreadRef)
         useRightPanelStore.getState().activateSurface(activeThreadRef, surfaceId);
@@ -3086,6 +3089,16 @@ export default function ChatView(props: ChatViewProps) {
                 : null;
   const openSideChatStable = useStableCallback(() => void sideChat.open());
   const openSurfaceInMainView = useOpenSurfaceInMainView(activeThreadRef);
+  // g3code: quick actions for the New tab page, which renders inside the browser panel.
+  usePublishNewTabActions(
+    {
+      terminal: activeProject !== null && canOperateTerminal ? addTerminalSurfaceStable : undefined,
+      files: activeProject !== null ? addFilesSurfaceStable : undefined,
+      diff: isServerThread && isGitRepo ? addDiffSurfaceStable : undefined,
+      sideChat: sideChatsOffered && sideChat.available ? openSideChatStable : undefined,
+    },
+    !embedded,
+  );
   const sendSideChatStable = useStableCallback(sideChat.open);
   const { onConfirmRevertStable, onForkFromRunStable, onRevertTimelineTurnStable } =
     useTimelineRewind({

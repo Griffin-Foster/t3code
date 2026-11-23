@@ -193,10 +193,19 @@ const CHAT_TAB_ROOT_CLASSES =
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
+function hasOnlyMod(event: KeyboardEvent): boolean {
+  const mod = IS_MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  return mod && !event.altKey && !event.shiftKey && !event.isComposing;
+}
+
+/** Cmd+T (Ctrl+T elsewhere), the Codex app's new tab. */
+function isNewTabShortcut(event: KeyboardEvent): boolean {
+  return hasOnlyMod(event) && event.code === "KeyT";
+}
+
 /** ⌘1–⌘9 (Ctrl elsewhere) with no other modifiers, as a 1-based tab number. */
 function tabShortcutNumber(event: KeyboardEvent): number | null {
-  const mod = IS_MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  if (!mod || event.altKey || event.shiftKey || event.isComposing) return null;
+  if (!hasOnlyMod(event)) return null;
   const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
   return digit ? Number(digit) : null;
 }
@@ -212,6 +221,7 @@ export function useMaximizedChatLayout({
   surfaceIds,
   onEnterTabbedLayout,
   onMaximize,
+  onNewTab,
   onActivateSurface,
 }: {
   /** Use the Codex-style tabbed workspace for this thread. */
@@ -227,6 +237,8 @@ export function useMaximizedChatLayout({
   /** Opens and maximizes the thread's right panel, which holds the tab bar. */
   readonly onEnterTabbedLayout: () => void;
   readonly onMaximize: () => void;
+  /** Opens a new tab (Cmd+T). */
+  readonly onNewTab: () => void;
   readonly onActivateSurface: (surfaceId: string) => void;
 }): MaximizedChatLayout {
   const gt = useGT();
@@ -297,6 +309,12 @@ export function useMaximizedChatLayout({
   // these take over T3's thread-jump shortcuts, so this listens on the window's capture phase,
   // ahead of the sidebar's handler.
   const onTabShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (isNewTabShortcut(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      onNewTab();
+      return;
+    }
     const number = tabShortcutNumber(event);
     if (number === null) return;
     // Swallow even numbers with no tab, so they never fall through to a thread jump.

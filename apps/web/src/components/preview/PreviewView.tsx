@@ -78,6 +78,7 @@ import { openPreviewSession } from "./openPreviewSession";
 import { showPreviewPopup } from "./showPreviewPopup";
 import { PreviewChromeRow } from "./PreviewChromeRow";
 import { PreviewEmptyState } from "./PreviewEmptyState";
+import { G3_NEW_TAB_PAGE, NewTabPage } from "../chat/NewTabPage";
 import { PreviewMoreMenu, type PreviewMoreMenuActions } from "./PreviewMoreMenu";
 import { commitBrowserViewportChange } from "~/browser/browserViewportActions";
 import { browserResponsiveViewportForToggle, useBrowserDefaults } from "~/browser/browserDefaults";
@@ -1179,7 +1180,16 @@ export function PreviewView({
             </div>
           )
         ) : null}
-        {showEmptyState ? (
+        {showEmptyState && G3_NEW_TAB_PAGE ? (
+          <NewTabPage
+            threadRef={threadRef}
+            surfaceId={tabId ? `browser:${tabId}` : null}
+            configuredUrls={configuredUrls}
+            recentEntries={recentHistoryEntries}
+            onSubmit={(next) => void handleSubmitUrl(next)}
+            onOpenUrl={(next) => void handleOpenServerUrl(next)}
+          />
+        ) : showEmptyState ? (
           <PreviewEmptyState
             threadRef={threadRef}
             environmentId={threadRef.environmentId}
