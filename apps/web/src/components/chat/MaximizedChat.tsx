@@ -523,8 +523,8 @@ export function useMaximizedChatLayout({
     // Anchored by the card's bottom-right, so minimizing and closing keep it in the corner.
     const bottom = containerHeight - (rect.y + rect.height);
     const right = containerWidth - (rect.x + rect.width);
-    // The message box and the context row under it, plus a little breathing room.
-    const minimizedHeight = `calc(var(--workspace-topbar-height) + ${composerHeight > 0 ? composerHeight + 8 : 168}px)`;
+    // The message box (plus the card's top and bottom border), right under the header.
+    const minimizedHeight = `calc(var(--workspace-topbar-height) + ${composerHeight > 0 ? composerHeight + 2 : 168}px)`;
 
     if (floatingState === "closed") {
       return {
@@ -566,7 +566,6 @@ export function useMaximizedChatLayout({
         // Minimized: only the header and message box show. Hidden, not unmounted, so the
         // scroll position stays.
         minimized && [
-          "[&>[data-chat-header]]:border-b [&>[data-chat-header]]:border-border",
           "[&_[data-chat-canvas]>div:not(:has([data-chat-composer-form]))]:invisible",
           // A new thread's centered "What should we build" heading would push the box up.
           "[&_[data-chat-canvas]_h1]:hidden",

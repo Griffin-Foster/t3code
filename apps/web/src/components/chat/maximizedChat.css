@@ -87,3 +87,53 @@
     transform: translateY(10px);
   }
 }
+
+/*
+ * g3code: in the floating chat card, the message box is the card's own bottom bar rather than
+ * a rounded box inside it, like the ChatGPT app. Full width, no surface of its own, one divider.
+ * The checkout/branch row under it stays on the Chat tab. A new thread's centered box keeps its
+ * own look.
+ */
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero]) .chat-composer-lane {
+  padding-inline: 0 !important;
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  :is([data-chat-composer-stack], [data-chat-composer-form], [data-slot="composer-shell"]) {
+  max-width: none !important;
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  [data-slot="composer-shell"]
+  > div:not([data-slot]) {
+  display: none;
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  :is(
+    [data-slot="composer-host"],
+    [data-chat-composer-surface],
+    [data-chat-composer-main-surface]
+  ) {
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  [data-chat-composer-main-surface] {
+  border-top: 1px solid var(--border);
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  [data-chat-composer-main-surface]::after {
+  display: none !important;
+}
+
+/* The bar sits flush with the card's bottom edge: drop the bottom spacer meant for full-height chats. */
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  [data-chat-composer-stack]
+  div:has(> [data-slot="composer-shell"])
+  ~ div[aria-hidden] {
+  display: none;
+}

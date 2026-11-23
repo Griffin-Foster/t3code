@@ -3612,6 +3612,7 @@ export default function ChatView(props: ChatViewProps) {
         }
         data-chat-column-maximized-away={maximizedChatLayout.away ? "true" : "false"}
         data-maximized-chat-mode={maximizedChatLayout.mode ?? undefined}
+        data-draft-hero={isDraftHeroState || undefined}
         data-chat-column
         inert={maximizedChatLayout.away}
         onPointerDown={maximizedChatLayout.onPointerDown}
