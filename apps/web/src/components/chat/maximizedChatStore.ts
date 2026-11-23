@@ -113,7 +113,7 @@ export function clampFloatingRect(
 /** Bottom-right corner with a margin, like the Codex app's floating chat. */
 export function defaultFloatingRect(containerWidth: number, containerHeight: number) {
   const margin = 16;
-  const width = Math.min(480, Math.max(FLOATING_CHAT_MIN_WIDTH, containerWidth * 0.35));
+  const width = Math.min(440, Math.max(FLOATING_CHAT_MIN_WIDTH, containerWidth * 0.35));
   const height = Math.min(680, Math.max(FLOATING_CHAT_MIN_HEIGHT, containerHeight * 0.65));
   return clampFloatingRect(
     {

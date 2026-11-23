@@ -70,8 +70,7 @@ const CLICK_SLOP_PX = 3;
 const SIDEBAR_HEADER_CLASSES =
   "[&_[data-chat-header]]:pl-4! [&_[data-chat-header]]:pr-44! [&_[data-chat-header]_[data-workspace-titlebar-controls]]:right-44!";
 // Room for the card's minimize button (left) and drag handle (right) inside the chat header.
-const FLOATING_HEADER_CLASSES =
-  "[&_[data-chat-header]]:pl-11! [&_[data-chat-header]]:pr-10! [&_[data-chat-header]_[data-workspace-titlebar-controls]]:right-9!";
+const FLOATING_HEADER_CLASSES = "[&_[data-chat-header]]:pl-12! [&_[data-chat-header]]:pr-12!";
 
 function useElementSize(element: HTMLElement | null) {
   const [size, setSize] = useState({ width: 0, height: 0, topbarHeight: 0 });
@@ -541,10 +540,10 @@ export function useMaximizedChatLayout({
             data-g3-chat-bubble
             aria-label={gt("Open chat")}
             onClick={() => setFloatingState("open")}
-            className="absolute z-40 flex size-12 cursor-pointer items-center justify-center rounded-full border border-border bg-secondary text-foreground shadow-lg transition-colors hover:bg-accent [-webkit-app-region:no-drag]"
+            className="absolute z-40 flex size-10 cursor-pointer items-center justify-center rounded-full text-foreground/85 transition-colors hover:text-foreground [-webkit-app-region:no-drag]"
             style={{ right, bottom }}
           >
-            <MessageCircleIcon className="size-5" />
+            <MessageCircleIcon className="size-4.5" strokeWidth={1.75} />
           </button>
         ),
       };
@@ -555,7 +554,8 @@ export function useMaximizedChatLayout({
     return {
       mode,
       className: cn(
-        "absolute z-40 overflow-hidden rounded-2xl border border-border bg-background shadow-lg",
+        // Surface, corners, edge and shadow come from maximizedChat.css.
+        "absolute z-40 overflow-hidden",
         // State changes and window resizes glide; a drag follows the pointer exactly.
         liveFloatingRect === null &&
           "transition-[height,width,left,bottom] duration-200 ease-out motion-reduce:transition-none",
