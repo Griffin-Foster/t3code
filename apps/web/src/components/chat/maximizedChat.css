@@ -1,20 +1,71 @@
-/*
- * g3code: ⌘ number badges on the tabbed workspace's tabs, like the Codex app.
- * ⌘1 is the Chat tab (rendered by MaximizedChat.tsx); the panel's own tabs count from ⌘2.
- * A stylesheet rather than markup, so upstream's tab component stays untouched.
- */
+/* g3code: a damped spring (~8% overshoot) for the tabbed workspace's motion, like the ChatGPT app. */
+:root {
+  --g3-spring: linear(
+    0,
+    0.019,
+    0.071,
+    0.146,
+    0.236,
+    0.334,
+    0.435,
+    0.534,
+    0.628,
+    0.715,
+    0.793,
+    0.861,
+    0.919,
+    0.967,
+    1.005,
+    1.035,
+    1.056,
+    1.071,
+    1.079,
+    1.083,
+    1.083,
+    1.08,
+    1.074,
+    1.067,
+    1.059,
+    1.051,
+    1.042,
+    1.034,
+    1.027,
+    1.02,
+    1.014,
+    1.009,
+    1.004,
+    1.001,
+    0.998,
+    0.996,
+    1
+  );
+}
 
+/*
+ * g3code: ⌘ number badges on the tabbed workspace's tabs, like the Codex app. ⌘1 is the Chat
+ * tab (rendered by MaximizedChat.tsx); the panel's own tabs count from ⌘2. They only show while
+ * ⌘ is held (MaximizedChat.tsx sets data-g3-cmd-held on <html>). A stylesheet rather than markup,
+ * so upstream's tab component stays untouched.
+ */
 [data-g3-tab-key],
 [data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) [data-active-tab]::after {
-  margin-left: 0.375rem;
-  border-radius: 0.25rem;
-  background: var(--muted);
-  padding: 0 0.25rem;
+  margin-left: 2px;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 0.08);
+  padding: 0 5px;
   color: var(--muted-foreground);
   font-family: inherit;
-  font-size: 10px;
-  line-height: 1rem;
+  font-size: 11px;
+  line-height: 18px;
   white-space: nowrap;
+}
+
+[data-g3-tab-key] {
+  display: none;
+}
+
+:root[data-g3-cmd-held] [data-g3-tab-key] {
+  display: inline;
 }
 
 [data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) {
@@ -23,17 +74,146 @@
 
 [data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) [data-active-tab] {
   counter-increment: g3-tab;
-  max-width: 13rem;
 }
 
-[data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) [data-active-tab]::after {
+:root[data-g3-cmd-held]
+  [data-right-panel-tab-list]:has([data-chat-tab][data-tabbed])
+  [data-active-tab]::after {
   content: "⌘" counter(g3-tab);
 }
 
 /* Only ⌘2–⌘9 exist. */
-[data-right-panel-tab-list]:has([data-chat-tab][data-tabbed])
+:root[data-g3-cmd-held]
+  [data-right-panel-tab-list]:has([data-chat-tab][data-tabbed])
   [data-active-tab]:nth-of-type(n + 9)::after {
   content: none;
+}
+
+/*
+ * g3code: the tab bar, closer to the ChatGPT app: 32px tabs and buttons, 13px labels, 16px icons,
+ * one corner radius, and soft white hover/selected fills instead of the accent swatch.
+ */
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed])
+  :is([data-active-tab], [data-chat-tab]) {
+  height: 32px;
+  max-width: 13rem;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 0 10px 0 8px;
+  font-size: 13px;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed])
+  :is([data-active-tab], [data-chat-tab]):hover {
+  background: rgb(255 255 255 / 0.06);
+  color: var(--foreground);
+}
+
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed])
+  :is([data-active-tab="true"], [data-chat-tab][aria-pressed="true"]) {
+  background: rgb(255 255 255 / 0.09);
+  color: var(--foreground);
+}
+
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed])
+  :is([data-active-tab], [data-chat-tab])
+  :is(svg, img) {
+  width: 16px;
+  height: 16px;
+}
+
+/* The tab's icon slot (it turns into the close button on hover). */
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed]) [data-active-tab] > :first-child {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed]) [aria-label="Add panel surface"],
+[data-workspace-titlebar-controls] button {
+  width: 32px;
+  height: 32px;
+  border-color: transparent;
+  border-radius: 10px;
+}
+
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed]) [aria-label="Add panel surface"]:hover,
+[data-workspace-titlebar-controls] button:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+
+[data-right-panel-tabbar]:has([data-chat-tab][data-tabbed]) [aria-label="Add panel surface"] svg,
+[data-workspace-titlebar-controls] button svg {
+  width: 18px;
+  height: 18px;
+}
+
+/*
+ * g3code: the browser toolbar, closer to the ChatGPT app's browser: round 30px buttons and the
+ * address in a filled pill instead of a bordered box on a flat strip.
+ */
+[data-surface-subheader]:has([data-preview-url-input]) {
+  height: 46px;
+  min-height: 46px;
+  margin-bottom: 0;
+  gap: 4px;
+  padding: 0 10px;
+  border-bottom-color: transparent;
+  background: transparent;
+}
+
+[data-surface-subheader]:has([data-preview-url-input]) button {
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  border-radius: 9999px;
+}
+
+[data-surface-subheader]:has([data-preview-url-input]) button:not(:disabled):hover {
+  background: rgb(255 255 255 / 0.07);
+}
+
+[data-surface-subheader]:has([data-preview-url-input]) button svg {
+  width: 16px;
+  height: 16px;
+}
+
+[data-surface-subheader] [data-slot="input-group"]:has([data-preview-url-input]) {
+  height: 34px;
+  margin: 0 4px;
+  border-color: transparent;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: none;
+  transition:
+    background-color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+[data-surface-subheader] [data-slot="input-group"]:has([data-preview-url-input]):hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+[data-surface-subheader] [data-slot="input-group"]:has([data-preview-url-input]:focus) {
+  background: rgb(255 255 255 / 0.09);
+  box-shadow: 0 0 0 2px rgb(74 133 247 / 0.45);
+}
+
+[data-surface-subheader] [data-preview-url-input] {
+  height: 34px;
+  padding-inline: 14px;
+  font-size: 13.5px;
+}
+
+[data-surface-subheader] [data-slot="input-group"] button {
+  width: 28px;
+  height: 28px;
+  margin-right: 3px;
 }
 
 /*
@@ -51,7 +231,7 @@
 
   /* Not while closed (inert), so reopening from the bubble pops the card in again. */
   [data-chat-column][data-maximized-chat-mode="floating"]:not([inert]) {
-    animation: g3-pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: g3-pop-in 420ms var(--g3-spring);
     transform-origin: bottom right;
   }
 
@@ -60,7 +240,7 @@
   }
 
   [data-g3-chat-bubble] {
-    animation: g3-bubble-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    animation: g3-bubble-in 380ms var(--g3-spring);
   }
 }
 
@@ -268,11 +448,44 @@
 
 [data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
   [data-chat-provider-model-picker] {
-  width: 28px;
+  width: 32px;
+  height: 32px;
   min-width: 0;
   justify-content: center;
   padding: 0;
   border-color: transparent;
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  [data-chat-provider-model-picker]
+  > span {
+  flex: none;
+  justify-content: center;
+}
+
+/* Same round 32px hover target for +, model and mic, so icons and hover fills line up. */
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  :is(
+    [aria-label="Attach files"],
+    [data-chat-provider-model-picker],
+    [aria-label="Start voice input"]
+  ) {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  border-radius: 9999px;
+  border-color: transparent;
+  color: var(--muted-foreground);
+}
+
+[data-chat-column][data-maximized-chat-mode="floating"]:not([data-draft-hero])
+  :is(
+    [aria-label="Attach files"],
+    [data-chat-provider-model-picker],
+    [aria-label="Start voice input"]
+  ):hover {
+  background: rgb(255 255 255 / 0.08);
+  color: var(--foreground);
 }
 
 /* Attach as a plus. */

@@ -62,11 +62,14 @@ const FLOATING_RESIZE_EDGES: ReadonlyArray<{
 ];
 
 const BUBBLE_SIZE = 40;
-const CARD_CLOSE_MS = 180;
-const CARD_OPEN_MS = 280;
-// A light overshoot for the snap, like the ChatGPT app; open/minimize glide without bounce.
+const CARD_CLOSE_MS = 240;
+const CARD_OPEN_MS = 460;
+// Every card motion uses the same damped spring (--g3-spring in maximizedChat.css), like the
+// ChatGPT app: the snap to an anchor, open/minimize, and growing out of / into the bubble.
 const CARD_TRANSITION =
-  "left 420ms cubic-bezier(0.34, 1.36, 0.64, 1), bottom 420ms cubic-bezier(0.34, 1.36, 0.64, 1), width 220ms ease-out, height 220ms ease-out";
+  "left 520ms var(--g3-spring), bottom 520ms var(--g3-spring), width 420ms var(--g3-spring), height 420ms var(--g3-spring)";
+// Holding ⌘ this long reveals the tabs' ⌘ number badges; quick shortcuts don't flash them.
+const CMD_HINT_DELAY_MS = 300;
 const ANCHOR_ORIGIN: Record<FloatingChatAnchor, string> = {
   "bottom-left": "bottom left",
   "bottom-center": "bottom center",
@@ -380,6 +383,43 @@ export function useMaximizedChatLayout({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [tabbed]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors whether ⌘ is held onto <html> (window key listeners) so CSS can reveal the tabs' ⌘ number badges
+  useEffect(() => {
+    if (!tabbed) return;
+    const root = document.documentElement;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const hide = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+      delete root.dataset.g3CmdHeld;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isMod = IS_MAC ? event.key === "Meta" : event.key === "Control";
+      if (!isMod) {
+        // Any other key while ⌘ is down is a shortcut, not a request for the hints.
+        if (timer !== null) hide();
+        return;
+      }
+      if (timer !== null || root.dataset.g3CmdHeld !== undefined) return;
+      timer = setTimeout(() => {
+        timer = null;
+        root.dataset.g3CmdHeld = "";
+      }, CMD_HINT_DELAY_MS);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (IS_MAC ? event.key === "Meta" : event.key === "Control") hide();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", hide);
+    return () => {
+      hide();
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", hide);
+    };
+  }, [tabbed]);
+
   const chatTab = chatTabAvailable ? (
     <>
       <button
@@ -639,8 +679,8 @@ export function useMaximizedChatLayout({
           : {
               animation:
                 cardMotion === "closing"
-                  ? `g3-card-into-bubble ${CARD_CLOSE_MS}ms cubic-bezier(0.4, 0, 1, 1) forwards`
-                  : `g3-card-out-of-bubble ${CARD_OPEN_MS}ms cubic-bezier(0.2, 0.9, 0.3, 1.1)`,
+                  ? `g3-card-into-bubble ${CARD_CLOSE_MS}ms cubic-bezier(0.4, 0, 0.9, 0.6) forwards`
+                  : `g3-card-out-of-bubble ${CARD_OPEN_MS}ms var(--g3-spring)`,
             }),
       },
       away: false,
