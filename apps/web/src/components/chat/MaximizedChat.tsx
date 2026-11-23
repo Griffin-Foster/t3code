@@ -1,6 +1,6 @@
 import {
-  ChevronUpIcon,
   GripVerticalIcon,
+  MessageCircleIcon,
   MessageSquareIcon,
   MinusIcon,
   PanelRightIcon,
@@ -28,6 +28,7 @@ import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   type FloatingChatRect,
+  type FloatingChatState,
   type MaximizedChatMode,
   clampFloatingRect,
   clampSidebarWidth,
@@ -174,6 +175,8 @@ interface ChatColumnLayout {
   readonly onPointerDown: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
   /** Resize handles, card controls and drag shield, rendered inside the chat column. */
   readonly chrome: ReactNode;
+  /** Rendered beside the chat column: the closed floating chat's bubble. */
+  readonly overlay?: ReactNode;
 }
 
 export interface MaximizedChatLayout extends ChatColumnLayout {
@@ -249,7 +252,7 @@ export function useMaximizedChatLayout({
   const mode = useMaximizedChatStore((state) => state.mode);
   const storedSidebarWidth = useMaximizedChatStore((state) => state.sidebarWidth);
   const storedFloatingRect = useMaximizedChatStore((state) => state.floatingRect);
-  const collapsed = useMaximizedChatStore((state) => state.floatingCollapsed);
+  const floatingState = useMaximizedChatStore((state) => state.floatingState);
   const {
     width: containerWidth,
     height: containerHeight,
@@ -269,6 +272,22 @@ export function useMaximizedChatLayout({
     liveFloatingRectRef.current = rect;
     setLiveFloatingRectState(rect);
   };
+
+  // A minimized floating card wraps its header and message box, so it tracks the box's height.
+  const [composerHeight, setComposerHeight] = useState(0);
+  const measureComposer = maximized && mode === "floating" && floatingState === "minimized";
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mirrors the floating chat's message box height (a DOM size) while the card is minimized
+  useEffect(() => {
+    if (!container || !measureComposer) return;
+    const form = container.querySelector<HTMLElement>(
+      "[data-chat-column] [data-chat-composer-stack]",
+    );
+    if (!form) return;
+    return observeResize(form, (entries) => {
+      const entry = entries.at(-1);
+      if (entry) setComposerHeight(entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height);
+    });
+  }, [container, measureComposer]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the thread's right panel open and maximized, since the tab bar lives in it; runs before paint so the untabbed layout never flashes
   useLayoutEffect(() => {
@@ -458,6 +477,8 @@ export function useMaximizedChatLayout({
       if (live !== null) useMaximizedChatStore.getState().setFloatingRect(live);
       setLiveFloatingRect(null);
     };
+    const setFloatingState = (next: FloatingChatState) =>
+      useMaximizedChatStore.getState().setFloatingState(next);
     const startMove = (event: ReactPointerEvent) => {
       drag.start(
         event,
@@ -473,8 +494,8 @@ export function useMaximizedChatLayout({
           ),
         (moved) => {
           commitFloatingRect();
-          // A plain click on a minimized card's header opens it again.
-          if (!moved && collapsed) useMaximizedChatStore.getState().setFloatingCollapsed(false);
+          // Like the ChatGPT app: a click on the header (not a drag) minimizes or reopens.
+          if (!moved) setFloatingState(floatingState === "open" ? "minimized" : "open");
         },
       );
     };
@@ -499,27 +520,64 @@ export function useMaximizedChatLayout({
       if (!target.closest("[data-chat-header]") || target.closest(INTERACTIVE_SELECTOR)) return;
       startMove(event);
     };
-    const toggleLabel = collapsed ? gt("Expand chat") : gt("Minimize chat");
+    // Anchored by the card's bottom-right, so minimizing and closing keep it in the corner.
+    const bottom = containerHeight - (rect.y + rect.height);
+    const right = containerWidth - (rect.x + rect.width);
+    // The message box and the context row under it, plus a little breathing room.
+    const minimizedHeight = `calc(var(--workspace-topbar-height) + ${composerHeight > 0 ? composerHeight + 8 : 168}px)`;
+
+    if (floatingState === "closed") {
+      return {
+        mode,
+        // Hidden but mounted, so the draft and scroll position survive.
+        className: "invisible pointer-events-none absolute",
+        style: { left: rect.x, bottom, width: rect.width, height: rect.height },
+        away: true,
+        onPointerDown: undefined,
+        chrome: null,
+        overlay: (
+          <button
+            type="button"
+            data-g3-chat-bubble
+            aria-label={gt("Open chat")}
+            onClick={() => setFloatingState("open")}
+            className="absolute z-40 flex size-12 cursor-pointer items-center justify-center rounded-full border border-border bg-secondary text-foreground shadow-lg transition-colors hover:bg-accent [-webkit-app-region:no-drag]"
+            style={{ right, bottom }}
+          >
+            <MessageCircleIcon className="size-5" />
+          </button>
+        ),
+      };
+    }
+
+    const minimized = floatingState === "minimized";
+    const closeLabel = gt("Hide chat");
     return {
       mode,
       className: cn(
-        "absolute z-40 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl",
-        // Minimize/expand and window-resize changes glide; a drag follows the pointer exactly.
+        "absolute z-40 overflow-hidden rounded-2xl border border-border bg-background shadow-lg",
+        // State changes and window resizes glide; a drag follows the pointer exactly.
         liveFloatingRect === null &&
           "transition-[height,width,left,bottom] duration-200 ease-out motion-reduce:transition-none",
         // The chat header is a window drag region in the desktop app; over the panel it must not be.
         "[-webkit-app-region:no-drag] [&_.drag-region]:[-webkit-app-region:no-drag]!",
-        "[&_[data-chat-header]]:cursor-grab",
+        "[&_[data-chat-header]]:cursor-pointer",
         FLOATING_HEADER_CLASSES,
-        // Minimized: only the header shows. Hidden, not unmounted, so the draft and scroll position stay.
-        collapsed && "[&>:not([data-chat-header]):not([data-maximized-chat-chrome])]:invisible",
+        // Minimized: only the header and message box show. Hidden, not unmounted, so the
+        // scroll position stays.
+        minimized && [
+          "[&>[data-chat-header]]:border-b [&>[data-chat-header]]:border-border",
+          "[&_[data-chat-canvas]>div:not(:has([data-chat-composer-form]))]:invisible",
+          // A new thread's centered "What should we build" heading would push the box up.
+          "[&_[data-chat-canvas]_h1]:hidden",
+          "[&>div:not([data-maximized-chat-chrome]):not(:has([data-chat-canvas]))]:invisible",
+        ],
       ),
-      // Anchored by its bottom edge, so minimizing to the header keeps it in the corner.
       style: {
         left: rect.x,
-        bottom: containerHeight - (rect.y + rect.height),
+        bottom,
         width: rect.width,
-        height: collapsed ? "var(--workspace-topbar-height)" : rect.height,
+        height: minimized ? minimizedHeight : rect.height,
       },
       away: false,
       onPointerDown,
@@ -535,20 +593,14 @@ export function useMaximizedChatLayout({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={toggleLabel}
-                    onClick={() =>
-                      useMaximizedChatStore.getState().setFloatingCollapsed(!collapsed)
-                    }
+                    aria-label={closeLabel}
+                    onClick={() => setFloatingState("closed")}
                   >
-                    {collapsed ? (
-                      <ChevronUpIcon className="size-4" />
-                    ) : (
-                      <MinusIcon className="size-4" />
-                    )}
+                    <MinusIcon className="size-4" />
                   </Button>
                 }
               />
-              <TooltipPopup side="bottom">{toggleLabel}</TooltipPopup>
+              <TooltipPopup side="bottom">{closeLabel}</TooltipPopup>
             </Tooltip>
           </div>
           <div
@@ -560,7 +612,7 @@ export function useMaximizedChatLayout({
           >
             <GripVerticalIcon className="size-4" />
           </div>
-          {collapsed
+          {minimized
             ? null
             : FLOATING_RESIZE_EDGES.map(({ edge, cursor, className }) => (
                 <div

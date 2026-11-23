@@ -21,17 +21,22 @@ const SIDEBAR_CHAT_MIN_WIDTH = 300;
 const FLOATING_CHAT_MIN_WIDTH = 320;
 const FLOATING_CHAT_MIN_HEIGHT = 260;
 
+/**
+ * The floating chat card, like the ChatGPT app's: `open` shows the whole chat, `minimized` just
+ * its header and message box, `closed` a small chat bubble.
+ */
+export type FloatingChatState = "open" | "minimized" | "closed";
+
 interface MaximizedChatState {
   mode: MaximizedChatMode;
   sidebarWidth: number;
   /** Null until first shown, so the default can be placed against the actual layout size. */
   floatingRect: FloatingChatRect | null;
-  /** The floating card is minimized to its header. */
-  floatingCollapsed: boolean;
+  floatingState: FloatingChatState;
   setMode: (mode: MaximizedChatMode) => void;
   setSidebarWidth: (width: number) => void;
   setFloatingRect: (rect: FloatingChatRect) => void;
-  setFloatingCollapsed: (collapsed: boolean) => void;
+  setFloatingState: (state: FloatingChatState) => void;
 }
 
 export const useMaximizedChatStore = create<MaximizedChatState>()(
@@ -41,28 +46,36 @@ export const useMaximizedChatStore = create<MaximizedChatState>()(
       mode: "floating",
       sidebarWidth: 440,
       floatingRect: null,
-      floatingCollapsed: false,
-      setMode: (mode) => set({ mode, floatingCollapsed: false }),
+      floatingState: "open",
+      setMode: (mode) => set({ mode, floatingState: "open" }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setFloatingRect: (floatingRect) => set({ floatingRect }),
-      setFloatingCollapsed: (floatingCollapsed) => set({ floatingCollapsed }),
+      setFloatingState: (floatingState) => set({ floatingState }),
     }),
     {
       name: "g3code:maximized-chat",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() =>
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
-      // Version 1 also had a "hidden" mode; the card's minimize button replaces it.
+      // Version 1 also had a "hidden" mode; version 2 a minimized-to-header flag.
       migrate: (persisted) => {
-        const state = (persisted ?? {}) as Partial<MaximizedChatState> & { mode?: string };
-        return { ...state, mode: state.mode === "floating" ? "floating" : "sidebar" };
+        const state = (persisted ?? {}) as Partial<MaximizedChatState> & {
+          mode?: string;
+          floatingCollapsed?: boolean;
+        };
+        const { floatingCollapsed, ...rest } = state;
+        return {
+          ...rest,
+          mode: state.mode === "sidebar" ? "sidebar" : "floating",
+          floatingState: floatingCollapsed ? "minimized" : (state.floatingState ?? "open"),
+        };
       },
-      partialize: ({ mode, sidebarWidth, floatingRect, floatingCollapsed }) => ({
+      partialize: ({ mode, sidebarWidth, floatingRect, floatingState }) => ({
         mode,
         sidebarWidth,
         floatingRect,
-        floatingCollapsed,
+        floatingState,
       }),
     },
   ),

@@ -4286,6 +4286,7 @@ export default function ChatView(props: ChatViewProps) {
         )}
       </div>
 
+      {maximizedChatLayout.overlay}
       {rightPanelPresent && activeThreadRef && !embedded ? (
         <ChatRightPanel
           sheet={shouldUsePlanSidebarSheet}
