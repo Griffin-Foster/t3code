@@ -37,7 +37,8 @@ interface MaximizedChatState {
 export const useMaximizedChatStore = create<MaximizedChatState>()(
   persist(
     (set) => ({
-      mode: "sidebar",
+      // Tabs open full screen with the chat floating; the side panel toggle docks it.
+      mode: "floating",
       sidebarWidth: 440,
       floatingRect: null,
       floatingCollapsed: false,

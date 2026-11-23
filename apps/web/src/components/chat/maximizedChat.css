@@ -1,0 +1,37 @@
+/*
+ * g3code: ⌘ number badges on the tabbed workspace's tabs, like the Codex app.
+ * ⌘1 is the Chat tab (rendered by MaximizedChat.tsx); the panel's own tabs count from ⌘2.
+ * A stylesheet rather than markup, so upstream's tab component stays untouched.
+ */
+
+[data-g3-tab-key],
+[data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) [data-active-tab]::after {
+  margin-left: 0.375rem;
+  border-radius: 0.25rem;
+  background: var(--muted);
+  padding: 0 0.25rem;
+  color: var(--muted-foreground);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+[data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) {
+  counter-reset: g3-tab 1;
+}
+
+[data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) [data-active-tab] {
+  counter-increment: g3-tab;
+  max-width: 13rem;
+}
+
+[data-right-panel-tab-list]:has([data-chat-tab][data-tabbed]) [data-active-tab]::after {
+  content: "⌘" counter(g3-tab);
+}
+
+/* Only ⌘2–⌘9 exist. */
+[data-right-panel-tab-list]:has([data-chat-tab][data-tabbed])
+  [data-active-tab]:nth-of-type(n + 9)::after {
+  content: none;
+}

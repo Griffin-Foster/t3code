@@ -1,10 +1,9 @@
 import {
   ChevronUpIcon,
-  ExpandIcon,
   GripVerticalIcon,
   MessageSquareIcon,
   MinusIcon,
-  ShrinkIcon,
+  PanelRightIcon,
 } from "lucide-react";
 import { useGT } from "gt-react";
 import {
@@ -13,6 +12,8 @@ import {
   type ReactNode,
   memo,
   useEffect,
+  useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -20,7 +21,10 @@ import {
 import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 
+import "./maximizedChat.css";
+
 import { Button } from "../ui/button";
+import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   type FloatingChatRect,
@@ -173,9 +177,11 @@ interface ChatColumnLayout {
 }
 
 export interface MaximizedChatLayout extends ChatColumnLayout {
+  /** g3code's Codex-style tabbed workspace is on: the panel stays maximized with a Chat tab. */
+  readonly tabbed: boolean;
   /** The "Chat" tab for the start of the right panel's tab bar. */
   readonly chatTab: ReactNode;
-  /** Full screen / Exit full screen, for the window's top-right controls. */
+  /** The chat side panel toggle, for the window's top-right controls. */
   readonly viewControl: ReactNode;
   /** Classes for the workspace layout root. */
   readonly rootClassName: string | undefined;
@@ -185,19 +191,43 @@ export interface MaximizedChatLayout extends ChatColumnLayout {
 const CHAT_TAB_ROOT_CLASSES =
   "[&_[data-right-panel-tab-list]_[data-active-tab=true]]:bg-transparent! [&_[data-right-panel-tab-list]_[data-active-tab=true]]:text-muted-foreground!";
 
+const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** ⌘1–⌘9 (Ctrl elsewhere) with no other modifiers, as a 1-based tab number. */
+function tabShortcutNumber(event: KeyboardEvent): number | null {
+  const mod = IS_MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  if (!mod || event.altKey || event.shiftKey || event.isComposing) return null;
+  const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+  return digit ? Number(digit) : null;
+}
+
 export function useMaximizedChatLayout({
+  tabbed,
+  threadKey,
+  panelOpen,
   maximized,
   container,
   chatTabAvailable,
   activeSurfaceId,
+  surfaceIds,
+  onEnterTabbedLayout,
   onMaximize,
+  onActivateSurface,
 }: {
+  /** Use the Codex-style tabbed workspace for this thread. */
+  readonly tabbed: boolean;
+  readonly threadKey: string | null;
+  readonly panelOpen: boolean;
   readonly maximized: boolean;
   readonly container: HTMLElement | null;
   /** Whether the inline right panel (and its tab bar) is showing. */
   readonly chatTabAvailable: boolean;
   readonly activeSurfaceId: string | null;
+  readonly surfaceIds: readonly string[];
+  /** Opens and maximizes the thread's right panel, which holds the tab bar. */
+  readonly onEnterTabbedLayout: () => void;
   readonly onMaximize: () => void;
+  readonly onActivateSurface: (surfaceId: string) => void;
 }): MaximizedChatLayout {
   const gt = useGT();
   const mode = useMaximizedChatStore((state) => state.mode);
@@ -224,16 +254,33 @@ export function useMaximizedChatLayout({
     setLiveFloatingRectState(rect);
   };
 
-  // The Chat tab fills the maximized panel's content area with the chat, like the Codex app's
-  // chat tab. Selecting any panel tab, a new active tab, or restoring the panel leaves it.
-  const [chatTabSelected, setChatTabSelected] = useState(false);
-  const [seen, setSeen] = useState({ maximized, activeSurfaceId });
-  if (seen.maximized !== maximized || seen.activeSurfaceId !== activeSurfaceId) {
-    setSeen({ maximized, activeSurfaceId });
-    if (seen.activeSurfaceId !== activeSurfaceId || !maximized) setChatTabSelected(false);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the thread's right panel open and maximized, since the tab bar lives in it; runs before paint so the untabbed layout never flashes
+  useLayoutEffect(() => {
+    if (tabbed && !(panelOpen && maximized)) onEnterTabbedLayout();
+  }, [tabbed, panelOpen, maximized, onEnterTabbedLayout]);
+
+  // The Chat tab fills the panel's content area with the chat, like the Codex app's chat tab.
+  // Tabbed threads open on it, and return to it when their last tab closes. Selecting any panel
+  // tab or a newly opened one leaves it.
+  const [chatTabSelected, setChatTabSelected] = useState(tabbed);
+  const [seen, setSeen] = useState({ threadKey, maximized, activeSurfaceId });
+  if (
+    seen.threadKey !== threadKey ||
+    seen.maximized !== maximized ||
+    seen.activeSurfaceId !== activeSurfaceId
+  ) {
+    setSeen({ threadKey, maximized, activeSurfaceId });
+    if (seen.threadKey !== threadKey) setChatTabSelected(tabbed);
+    else if (seen.activeSurfaceId !== activeSurfaceId) {
+      setChatTabSelected(tabbed && activeSurfaceId === null);
+    } else if (!maximized && !tabbed) setChatTabSelected(false);
   }
-  if (chatTabSelected && !chatTabAvailable) setChatTabSelected(false);
-  const chatTabActive = chatTabSelected && maximized && chatTabAvailable;
+  if (!tabbed && chatTabSelected && !chatTabAvailable) setChatTabSelected(false);
+  const chatTabActive =
+    maximized &&
+    chatTabAvailable &&
+    (chatTabSelected || (tabbed && (activeSurfaceId === null || surfaceIds.length === 0)));
+
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- listens for clicks on the panel's own tabs, which live in upstream markup, while the Chat tab is selected
   useEffect(() => {
     if (!container || !chatTabActive) return;
@@ -246,11 +293,38 @@ export function useMaximizedChatLayout({
     return () => container.removeEventListener("click", onClick, true);
   }, [container, chatTabActive]);
 
+  // ⌘1 selects the Chat tab and ⌘2–⌘9 the panel tabs, like the Codex app. In tabbed threads
+  // these take over T3's thread-jump shortcuts, so this listens on the window's capture phase,
+  // ahead of the sidebar's handler.
+  const onTabShortcut = useEffectEvent((event: KeyboardEvent) => {
+    const number = tabShortcutNumber(event);
+    if (number === null) return;
+    // Swallow even numbers with no tab, so they never fall through to a thread jump.
+    event.preventDefault();
+    event.stopPropagation();
+    if (number === 1) {
+      setChatTabSelected(true);
+      return;
+    }
+    const surfaceId = surfaceIds[number - 2];
+    if (!surfaceId) return;
+    onActivateSurface(surfaceId);
+    setChatTabSelected(false);
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- window keyboard listener for the tab shortcuts while a tabbed thread is mounted
+  useEffect(() => {
+    if (!tabbed) return;
+    const onKeyDown = (event: KeyboardEvent) => onTabShortcut(event);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [tabbed]);
+
   const chatTab = chatTabAvailable ? (
     <>
       <button
         type="button"
         data-chat-tab
+        data-tabbed={tabbed || undefined}
         aria-pressed={chatTabActive}
         className={cn(
           "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs [-webkit-app-region:no-drag]",
@@ -265,6 +339,7 @@ export function useMaximizedChatLayout({
       >
         <MessageSquareIcon className="size-3.5" />
         {gt("Chat")}
+        {tabbed ? <kbd data-g3-tab-key>⌘1</kbd> : null}
       </button>
       <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border" />
     </>
@@ -475,44 +550,36 @@ export function useMaximizedChatLayout({
 
   return {
     ...column,
+    tabbed,
     chatTab,
-    viewControl: maximized && !chatTabActive ? <MaximizedChatViewControl /> : null,
+    viewControl: maximized ? <ChatSidePanelToggle /> : null,
     rootClassName: chatTabActive ? CHAT_TAB_ROOT_CLASSES : undefined,
   };
 }
 
-/** Switches the maximized view between docked chat and full screen with a floating chat. */
-const MaximizedChatViewControl = memo(function MaximizedChatViewControl() {
+/**
+ * Docks the chat on the right of the panel (on) or floats it as a card (off), like the Codex
+ * app's side panel toggle.
+ */
+const ChatSidePanelToggle = memo(function ChatSidePanelToggle() {
   const gt = useGT();
   const mode = useMaximizedChatStore((state) => state.mode);
   const setMode = useMaximizedChatStore((state) => state.setMode);
-  if (mode === "floating") {
-    return (
-      <Button
-        className="[-webkit-app-region:no-drag]"
-        variant="outline"
-        size="xs"
-        onClick={() => setMode("sidebar")}
-      >
-        <ShrinkIcon />
-        {gt("Exit full screen")}
-      </Button>
-    );
-  }
-  const label = gt("Full screen");
+  const label = gt("Chat side panel");
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
-            className="[-webkit-app-region:no-drag]"
-            variant="ghost"
-            size="icon-sm"
+          <Toggle
+            className="shrink-0 [-webkit-app-region:no-drag]"
+            pressed={mode === "sidebar"}
+            onPressedChange={(pressed) => setMode(pressed ? "sidebar" : "floating")}
             aria-label={label}
-            onClick={() => setMode("floating")}
+            variant="ghost"
+            size="sm"
           >
-            <ExpandIcon className="size-4" />
-          </Button>
+            <PanelRightIcon className="size-4" />
+          </Toggle>
         }
       />
       <TooltipPopup side="bottom">{label}</TooltipPopup>

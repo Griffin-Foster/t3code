@@ -1218,12 +1218,26 @@ export default function ChatView(props: ChatViewProps) {
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
   // g3code: keeps the chat usable (sidebar or floating) while the panel is maximized.
   const maximizedChatLayout = useMaximizedChatLayout({
+    tabbed: !embedded && activeThreadRef !== null,
+    threadKey: activeThreadKey,
+    panelOpen: rightPanelOpen,
     maximized: rightPanelMaximized,
     container: workspaceLayoutElement,
     chatTabAvailable: !embedded && rightPanelOpen && !shouldUsePlanSidebarSheet,
     activeSurfaceId: renderedRightPanelSurface?.id ?? null,
+    surfaceIds: renderedRightPanelSurfaces.map((surface) => surface.id),
+    onEnterTabbedLayout: () => {
+      if (!activeThreadRef) return;
+      const store = useRightPanelStore.getState();
+      store.show(activeThreadRef);
+      store.setMaximized(activeThreadRef, true);
+    },
     onMaximize: () => {
       if (activeThreadRef) useRightPanelStore.getState().setMaximized(activeThreadRef, true);
+    },
+    onActivateSurface: (surfaceId) => {
+      if (activeThreadRef)
+        useRightPanelStore.getState().activateSurface(activeThreadRef, surfaceId);
     },
   });
   const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
@@ -3532,12 +3546,13 @@ export default function ChatView(props: ChatViewProps) {
     <PanelLayoutControls
       {...panelToggleControlProps}
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
+      {...(maximizedChatLayout.tabbed ? { showRightPanelControl: false } : {})}
     />
   );
   const threadPanelHeaderControl = <ThreadPanelHeaderControl {...panelToggleControlProps} />;
   const panelLayoutControls = (
     <WorkspaceTitlebarControls
-      showMaximizeControl={!shouldUsePlanSidebarSheet}
+      showMaximizeControl={!shouldUsePlanSidebarSheet && !maximizedChatLayout.tabbed}
       rightPanelOpen={rightPanelOpen}
       animationsActive={panelAnimationsActive}
       maximized={rightPanelMaximized}
