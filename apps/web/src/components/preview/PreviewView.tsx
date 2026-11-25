@@ -841,6 +841,7 @@ export function PreviewView({
           id: annotation.id,
           label: String(index + 1),
           pageUrl: annotation.pageUrl,
+          comment: annotation.comment.slice(0, 4000),
           selector: element?.element.selector ?? null,
           ...(annotation.anchor ? { offset: annotation.anchor } : {}),
           rect: element?.rect ??
@@ -936,7 +937,8 @@ export function PreviewView({
       const cropDropped = screenshotFailed || capture.status === "failed";
       const annotation = capture.status === "failed" ? { ...picked, screenshot: null } : picked;
       if (capture.status === "captured") await readComposerImageBytes(capture.file);
-      addPreviewAnnotation(threadRef, annotation);
+      // g3code: annotations show as one chip above the message box, not inline in the text.
+      addPreviewAnnotation(threadRef, annotation, { appendReference: false });
       if (cropDropped) {
         toastManager.add(
           stackedThreadToast({

@@ -591,6 +591,7 @@ function createMarkerBubble(label: string): HTMLDivElement {
     "font:600 12px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif",
     "box-shadow:0 0 0 1.5px rgb(255 255 255 / 0.85),0 2px 6px rgb(0 0 0 / 0.35)",
     "will-change:transform",
+    "pointer-events:auto",
   ].join(";");
   return bubble;
 }
@@ -620,13 +621,36 @@ function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>
       return false;
     }
   };
+  // Hovering a marker shows its annotation's comment.
+  const card = document.createElement("div");
+  card.setAttribute(OVERLAY_ATTRIBUTE, "");
+  card.className =
+    "rounded-xl border border-border bg-popover/96 text-popover-foreground shadow-2xl backdrop-blur-xl";
+  card.style.cssText =
+    "position:absolute;left:0;top:0;display:none;max-width:min(280px,calc(100vw - 16px));padding:8px 10px;box-sizing:border-box;font:400 13px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none";
+  const showCard = (bubble: HTMLElement, comment: string): void => {
+    card.textContent = comment.trim() || "No comment";
+    card.style.display = "block";
+    const box = bubble.getBoundingClientRect();
+    const width = card.offsetWidth;
+    const height = card.offsetHeight;
+    const x = Math.min(Math.max(box.right + 6, 8), window.innerWidth - width - 8);
+    const above = box.top - height - 6;
+    const y = above >= 8 ? above : Math.min(box.bottom + 6, window.innerHeight - height - 8);
+    card.style.transform = `translate(${x}px, ${y}px)`;
+  };
   const items = markers
     .filter((marker) => samePage(marker.pageUrl))
     .map((marker) => {
       const bubble = createMarkerBubble(marker.label);
+      bubble.addEventListener("pointerenter", () => showCard(bubble, marker.comment ?? ""));
+      bubble.addEventListener("pointerleave", () => {
+        card.style.display = "none";
+      });
       element.appendChild(bubble);
       return { marker, bubble };
     });
+  element.appendChild(card);
   const position = (): void => {
     for (const { marker, bubble } of items) {
       let rect = marker.rect;

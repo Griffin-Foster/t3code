@@ -816,13 +816,13 @@ export function useComposerSend(input: ComposerSendInput) {
         previewAnnotations: sendContextPreviewAnnotations,
         direct: directAnnotation,
       });
-    // A direct "send annotation" writes the draft and sends in the same tick; the reference
-    // must be in the text now, not after the next render.
-    const draftPrompt = directAnnotation
-      ? ensureInlineContextReferences(promptAtSend, [
-          previewAnnotationContextReference(directAnnotation.annotation),
-        ])
-      : promptAtSend;
+    // g3code: annotations stay out of the text while drafting (they show as one chip), so their
+    // references join the end of the message here (a direct "send annotation" included); the
+    // provider only sees referenced context.
+    const draftPrompt = ensureInlineContextReferences(
+      promptAtSend,
+      composerPreviewAnnotations.map(previewAnnotationContextReference),
+    );
     const replyTo =
       useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.replyTo ?? null;
     const promptForSend = withReplyReference(draftPrompt, replyTo);

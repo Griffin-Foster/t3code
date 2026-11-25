@@ -297,6 +297,7 @@ import {
 } from "../../state/runtimeModeLimits";
 import { useComposerProviderModel } from "./useComposerProviderModel";
 import { useComposerImageGroups } from "./useComposerImageGroups";
+import { ComposerAnnotationsChip } from "./ComposerAnnotationsChip";
 import { useComposerStash } from "./useComposerStash";
 import { useComposerContextImport } from "./useComposerContextImport";
 import { useComposerAttachmentIntake } from "./useComposerAttachmentIntake";
@@ -1844,7 +1845,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       removedQueuedAttachments: activeRemovedEditingQueuedAttachments ?? [],
       fromHistory,
       images: composerImages,
-      previewAnnotations: composerPreviewAnnotations,
+      // g3code: annotations live in the chip above the text, so editing the text never drops them.
+      previewAnnotations: [],
       retained: retainedContextPayloads,
     });
     for (const annotationId of attachmentChanges.annotationIdsToRemove) {
@@ -3917,6 +3919,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onRemove={onRemoveEditingQueuedAttachment}
                   />
                 )}
+
+              {isComposerCollapsedMobile ? null : (
+                <ComposerAnnotationsChip
+                  annotations={composerPreviewAnnotations}
+                  images={composerImages}
+                  onRemove={(annotationId) =>
+                    removeComposerDraftPreviewAnnotation(composerDraftTarget, annotationId)
+                  }
+                  onRemoveAll={() => {
+                    for (const annotation of composerPreviewAnnotations) {
+                      removeComposerDraftPreviewAnnotation(composerDraftTarget, annotation.id);
+                    }
+                  }}
+                />
+              )}
 
               {composerAttachmentMediaRow}
 

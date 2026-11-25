@@ -1342,6 +1342,8 @@ export const PreviewAnnotationMarkerSchema = Schema.Struct({
   rect: PreviewAnnotationRectSchema,
   /** Where on the target the annotation was clicked (offset from its top-left). */
   offset: Schema.optional(PreviewAnnotationPointSchema),
+  /** The annotation's comment, shown when the marker is hovered. */
+  comment: Schema.optional(Schema.String.check(Schema.isMaxLength(4000))),
 });
 export type PreviewAnnotationMarker = typeof PreviewAnnotationMarkerSchema.Type;
 

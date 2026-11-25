@@ -544,3 +544,12 @@
   > div:has(h1) {
   display: none;
 }
+
+/* Annotation numbers and icon in the composer's "N annotations" chip match the page markers. */
+[data-g3-annotation-badge] {
+  border-radius: 10px 10px 10px 3px;
+  background: #2f7ef6;
+}
+[data-g3-annotation-icon] {
+  color: #2f7ef6;
+}
