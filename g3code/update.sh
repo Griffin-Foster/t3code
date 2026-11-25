@@ -241,22 +241,27 @@ cmd_resume() {
   verify_stage
 }
 
+# Refuses to install without changing anything, so the prepared update stays ready to retry.
+refuse_install() { echo "::error $1"; exit 1; }
+
 cmd_install() {
   local commit base target
-  # Quitting g3code ends its child processes, so carry on from a process of our own, running a
-  # copy of this script: installing replaces this file, and bash reads scripts as it goes.
+  commit=$(status_get commit); base=$(status_get base); target=$(status_get target)
   if [ -z "${G3CODE_UPDATE_DETACHED:-}" ]; then
+    # A second Restart click while installing is a no-op, not a failure.
+    case "$(status_get phase)" in installing | installed) exit 0 ;; esac
+    [ "$(status_get phase)" = ready ] || refuse_install "The update isn't ready yet."
+    [ "$(git_repo symbolic-ref --short HEAD 2>/dev/null)" = main ] || refuse_install "$REPO isn't on main, so the update wasn't installed."
+    [ -z "$(git_repo status --porcelain --untracked-files=no)" ] || refuse_install "$REPO has uncommitted changes, so the update wasn't installed. Commit or stash them, then try again."
+    [ "$(git_repo rev-parse main)" = "$base" ] || refuse_install "main changed after the update was prepared. Cancel it and update again."
+    KEEP=1 status_set phase=installing
+    # Quitting g3code ends its child processes, so carry on from a process of our own, running a
+    # copy of this script: installing replaces this file, and bash reads scripts as it goes.
     cp -f "$0" "$STATE_DIR/install.sh"
     G3CODE_UPDATE_DETACHED=1 nohup /bin/bash "$STATE_DIR/install.sh" install >> "$LOG" 2>&1 < /dev/null &
     exit 0
   fi
-  [ "$(status_get phase)" = ready ] || fail "The update isn't ready yet."
-  commit=$(status_get commit); base=$(status_get base); target=$(status_get target)
-  [ "$(git_repo symbolic-ref --short HEAD 2>/dev/null)" = main ] || fail "$REPO isn't on main, so the update wasn't installed."
-  [ -z "$(git_repo status --porcelain --untracked-files=no)" ] || fail "$REPO has uncommitted changes, so the update wasn't installed. Commit or stash them, then try again."
-  [ "$(git_repo rev-parse main)" = "$base" ] || fail "main changed after the update was prepared. Click Update to prepare it again."
 
-  KEEP=1 status_set phase=installing
   remove_helper_project
   stop_g3code
   git_repo tag -f "$ROLLBACK_TAG" "$base" >> "$LOG" 2>&1

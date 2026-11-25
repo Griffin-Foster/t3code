@@ -90,11 +90,13 @@ export const make = Effect.fn("G3codeUpdates.make")(function* (repo: string) {
   const run = (
     args: ReadonlyArray<string>,
     onProgress?: (percent: number, label: string) => void,
+    detached = false,
   ) =>
     Effect.callback<ScriptResult>((resume) => {
       const child = NodeChildProcess.spawn("/bin/bash", [script, ...args], {
         cwd: repo,
         env: { ...process.env, G3CODE_REPO: repo },
+        detached,
         stdio: ["ignore", "pipe", "pipe"],
       });
       let output = "";
@@ -329,16 +331,20 @@ export const make = Effect.fn("G3codeUpdates.make")(function* (repo: string) {
     return yield* withAction(
       "install",
       Effect.succeed({ accepted: false, completed: false, state }),
-      Effect.sync(() => {
-        const child = NodeChildProcess.spawn("/bin/bash", [script, "install"], {
-          cwd: repo,
-          env: { ...process.env, G3CODE_REPO: repo },
-          detached: true,
-          stdio: "ignore",
-        });
-        child.unref();
-        return { accepted: true, completed: true, state };
-      }),
+      // The script checks it's safe, then quits this app from a process of its own.
+      run(["install"], undefined, true).pipe(
+        Effect.flatMap((result) =>
+          result.code === 0
+            ? Effect.succeed({ accepted: true, completed: true, state })
+            : setState((current) => ({
+                ...current,
+                status: "error",
+                errorContext: "install",
+                canRetry: true,
+                message: result.lastLine ?? "Couldn't install the g3code update.",
+              })).pipe(Effect.map((next) => ({ accepted: true, completed: false, state: next }))),
+        ),
+      ),
     );
   });
 
