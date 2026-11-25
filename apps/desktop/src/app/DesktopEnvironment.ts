@@ -87,6 +87,7 @@ export class DesktopEnvironment extends Context.Service<
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
 const APP_BASE_NAME = "T3 Code";
+const G3CODE_NAME = "g3code";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
@@ -104,6 +105,10 @@ export function resolveDesktopAppBranding(input: {
   readonly appVersion: string;
 }): DesktopAppBranding {
   const stageLabel = resolveDesktopAppStageLabel(input);
+  // g3code: the dev build is the user's own app, so it carries its own name.
+  if (input.isDevelopment) {
+    return { baseName: G3CODE_NAME, stageLabel, displayName: G3CODE_NAME };
+  }
   return {
     baseName: APP_BASE_NAME,
     stageLabel,
