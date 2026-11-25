@@ -69,6 +69,7 @@ import * as DesktopTelemetryPublisher from "./telemetry/DesktopTelemetryPublishe
 import * as DesktopRendererHistory from "./telemetry/DesktopRendererHistory.ts";
 import * as DesktopUpdatePolicy from "./updates/DesktopUpdatePolicy.ts";
 import * as DesktopUpdates from "./updates/DesktopUpdates.ts";
+import * as G3codeUpdates from "./updates/G3codeUpdates.ts";
 import * as BrowserImport from "./preview/BrowserImport/BrowserImport.ts";
 import * as LinuxBrowserSecret from "./preview/BrowserImport/LinuxBrowserSecret.ts";
 import * as AppleSpeech from "./speech/AppleSpeech.ts";
@@ -210,6 +211,14 @@ const layerDesktopLocalEnvironmentAuth = DesktopLocalEnvironmentAuth.layer.pipe(
   Layer.provideMerge(layerDesktopBackend),
 );
 
+// g3code: its launcher sets G3CODE_REPO, and g3code updates itself from that checkout instead of
+// installing T3 Code's release builds (see updates/G3codeUpdates.ts).
+const g3codeRepo = G3codeUpdates.g3codeRepo();
+const layerDesktopUpdates =
+  g3codeRepo === undefined
+    ? DesktopUpdates.layer
+    : Layer.effect(DesktopUpdates.DesktopUpdates, G3codeUpdates.make(g3codeRepo));
+
 const layerDesktopApplication = Layer.mergeAll(
   DesktopLifecycle.layer,
   layerDesktopAppActivation,
@@ -220,7 +229,7 @@ const layerDesktopApplication = Layer.mergeAll(
 ).pipe(
   Layer.provideMerge(layerDesktopSnapShot),
   Layer.provideMerge(
-    DesktopUpdates.layer.pipe(
+    layerDesktopUpdates.pipe(
       Layer.provide(DesktopUpdatePolicy.layer),
       // The same layer as the foundation's, so the policy is still read once.
       Layer.provide(DesktopManagedPolicy.layer),
