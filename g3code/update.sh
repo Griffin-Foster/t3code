@@ -23,7 +23,7 @@ STATUS="$STATE_DIR/status"
 LOG="$STATE_DIR/update.log"
 BRANCH=g3code/update
 ROLLBACK_TAG=g3code/before-update
-SERVER_CLI="$REPO/apps/server/dist/bin.mjs"
+SERVER_CLI="${G3CODE_SERVER_CLI:-$REPO/apps/server/dist/bin.mjs}"
 DATA="${G3CODE_DATA:-$HOME/.t3/dev}"
 
 mkdir -p "$STATE_DIR"
