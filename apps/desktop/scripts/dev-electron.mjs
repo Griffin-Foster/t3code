@@ -48,6 +48,10 @@ const watchedDirectories = [
 ];
 const forcedShutdownTimeoutMs = 1_500;
 const restartDebounceMs = 120;
+// g3code: an app that quits this fast lost the single-instance lock to another dev app; relaunching
+// it in a loop makes that app steal focus on every attempt.
+const quickExitMs = 5_000;
+const maxQuickExits = 3;
 const childTreeGracePeriodMs = 1_200;
 const remoteDebuggingPort = process.env.T3CODE_DESKTOP_REMOTE_DEBUGGING_PORT?.trim();
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone dev script has no Effect runtime.
@@ -85,6 +89,8 @@ let shuttingDown = false;
 let restartTimer = null;
 let currentApp = null;
 let restartQueue = Promise.resolve();
+let quickExits = 0;
+let gaveUp = false;
 const expectedExits = new WeakSet();
 const watchers = [];
 
@@ -130,6 +136,7 @@ function startApp() {
   });
 
   currentApp = app;
+  const startedAt = Date.now();
 
   app.once("error", () => {
     if (currentApp === app) {
@@ -148,6 +155,14 @@ function startApp() {
 
     const exitedAbnormally = signal !== null || code !== 0;
     if (!shuttingDown && !expectedExits.has(app) && exitedAbnormally) {
+      quickExits = Date.now() - startedAt < quickExitMs ? quickExits + 1 : 0;
+      if (quickExits >= maxQuickExits) {
+        gaveUp = true;
+        console.error(
+          "[dev-electron] The desktop app keeps quitting at launch, most likely because another dev desktop app is running. Not relaunching it; quit the other app and restart this one.",
+        );
+        return;
+      }
       scheduleRestart();
     }
   });
@@ -193,7 +208,7 @@ async function stopApp() {
 }
 
 function scheduleRestart() {
-  if (shuttingDown) {
+  if (shuttingDown || gaveUp) {
     return;
   }
 
