@@ -129,15 +129,23 @@ open_helper_thread() {
   local reason="$1" target="$2" detail="$3"
   [ -f "$SERVER_CLI" ] || return 1
   [ -n "$(status_get helper)" ] && return 0
-  # New projects have no default model, so use the one from the most recently active thread.
-  local selection provider model
-  selection=$(sqlite3 "file:$DATA/statev2.sqlite?mode=ro" "select json_extract(payload_json, '\$.modelSelection.instanceId') || ' ' || json_extract(payload_json, '\$.modelSelection.model') from orchestration_v2_projection_threads where deleted_at is null and json_extract(payload_json, '\$.modelSelection.model') is not null order by updated_at desc limit 1" 2>/dev/null)
-  provider="${G3CODE_UPDATE_PROVIDER:-${selection%% *}}"
-  model="${G3CODE_UPDATE_MODEL:-${selection#* }}"
+  # Helpers use one of these models at medium reasoning: whichever the user ran most recently,
+  # else the first. (New projects have no default model.)
+  local allowed="'codex/gpt-6.2-sol','codex/gpt-6.2-astra','claudeAgent/claude-opus-5-5'"
+  local selection provider model effort_option
+  selection=$(sqlite3 "file:$DATA/statev2.sqlite?mode=ro" "select key from (select json_extract(payload_json, '\$.modelSelection.instanceId') || '/' || json_extract(payload_json, '\$.modelSelection.model') as key, updated_at from orchestration_v2_projection_threads where deleted_at is null) where key in ($allowed) order by updated_at desc limit 1" 2>/dev/null)
+  [ -n "$selection" ] || selection="codex/gpt-6.2-sol"
+  provider="${G3CODE_UPDATE_PROVIDER:-${selection%%/*}}"
+  model="${G3CODE_UPDATE_MODEL:-${selection#*/}}"
   [ -n "$provider" ] && [ -n "$model" ] || return 1
+  # Codex calls the reasoning option reasoningEffort; Claude calls it effort.
+  case "$provider" in
+    claude*) effort_option="effort=medium" ;;
+    *) effort_option="reasoningEffort=medium" ;;
+  esac
   t3 project add --title "g3code update" "$STAGE" >> "$LOG" 2>&1
   if helper_message "$reason" "$target" "$detail" |
-    t3 thread start --title "Update g3code to $target" --provider "$provider" --model "$model" "$STAGE" - >> "$LOG" 2>&1; then
+    t3 thread start --title "Update g3code to $target" --provider "$provider" --model "$model" --option "$effort_option" "$STAGE" - >> "$LOG" 2>&1; then
     KEEP=1 status_set helper=1
     return 0
   fi
