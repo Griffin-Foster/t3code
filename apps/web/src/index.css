@@ -1750,6 +1750,28 @@ body {
 
 /* Lighter default icon stroke. In the base layer so stroke-* utilities still win; any
    CSS beats lucide's stroke-width="2" attribute. */
+/* g3code: clickable things show the pointer cursor (Tailwind's base leaves buttons on the
+   arrow). :where keeps this weaker than any cursor-* utility a component sets. */
+@layer base {
+  :where(
+    button:not(:disabled),
+    [role="button"]:not([aria-disabled="true"]),
+    [role="tab"]:not([aria-disabled="true"]),
+    [role="menuitem"]:not([aria-disabled="true"]),
+    [role="menuitemradio"]:not([aria-disabled="true"]),
+    [role="menuitemcheckbox"]:not([aria-disabled="true"]),
+    [role="option"]:not([aria-disabled="true"]),
+    [role="switch"],
+    [role="checkbox"],
+    a[href],
+    summary,
+    select,
+    label[for]
+  ) {
+    cursor: pointer;
+  }
+}
+
 @layer base {
   :where(svg.lucide[stroke-width="2"]) {
     stroke-width: 1.75;

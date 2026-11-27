@@ -70,11 +70,11 @@ export function ComposerAnnotationsChip(props: {
                 return (
                   <li
                     key={annotation.id}
-                    className="group flex items-start gap-2.5 rounded-lg py-1.5 pr-1 pl-2 hover:bg-accent"
+                    className="group flex min-h-12 items-center gap-3 rounded-lg py-1.5 pr-1.5 pl-2.5 hover:bg-accent"
                   >
                     <span
                       data-g3-annotation-badge=""
-                      className="mt-px flex h-5 min-w-5 shrink-0 items-center justify-center px-1 font-semibold text-2xs text-white"
+                      className="flex size-5 shrink-0 items-center justify-center font-semibold text-2xs text-white"
                     >
                       {index + 1}
                     </span>
@@ -96,7 +96,7 @@ export function ComposerAnnotationsChip(props: {
                       <button
                         type="button"
                         aria-label={gt("Enlarge screenshot")}
-                        className="h-10 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-border bg-background"
+                        className="h-9 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-border bg-background transition-opacity hover:opacity-85"
                         onClick={() => expand(annotation.id)}
                       >
                         <img
