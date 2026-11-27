@@ -3923,6 +3923,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               {isComposerCollapsedMobile ? null : (
                 <ComposerAnnotationsChip
                   annotations={composerPreviewAnnotations}
+                  images={composerImages}
+                  onExpandImage={onExpandImage}
                   onRemove={(annotationId) =>
                     removeComposerDraftPreviewAnnotation(composerDraftTarget, annotationId)
                   }

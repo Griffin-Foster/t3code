@@ -2,16 +2,22 @@ import type { PreviewAnnotationPayload } from "@t3tools/contracts";
 import { useGT } from "gt-react";
 import { MousePointerClickIcon, XIcon } from "lucide-react";
 
+import type { ComposerImageAttachment } from "~/composerDraftStore";
+import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import "./maximizedChat.css";
 
 /**
  * g3code: the draft's page annotations as one "N annotations" chip above the message box, like
  * the ChatGPT app. Hovering lists them, numbered like their markers on the page, with delete
- * and delete-all. They join the message (as context references) only when it is sent.
+ * and delete-all, and each screenshot opens enlarged. They join the message (as context
+ * references) only when it is sent.
  */
 export function ComposerAnnotationsChip(props: {
   annotations: ReadonlyArray<PreviewAnnotationPayload>;
+  images: ReadonlyArray<ComposerImageAttachment>;
+  onExpandImage: (preview: ExpandedImagePreview) => void;
   onRemove: (annotationId: string) => void;
   onRemoveAll: () => void;
 }) {
@@ -22,8 +28,24 @@ export function ComposerAnnotationsChip(props: {
     "{count, plural, one {{formattedCount} annotation} other {{formattedCount} annotations}}",
     { count, formattedCount: count.toLocaleString() },
   );
+  const screenshotOf = (annotation: PreviewAnnotationPayload): string | null =>
+    annotation.screenshot?.dataUrl ||
+    props.images.find((image) => image.id === annotation.id)?.previewUrl ||
+    null;
+  const titleOf = (annotation: PreviewAnnotationPayload, index: number): string =>
+    `${index + 1}. ${annotation.comment.trim() || annotation.pageTitle?.trim() || annotation.pageUrl}`;
+  // Opens the screenshot enlarged; the viewer steps through every annotation's screenshot.
+  const expand = (annotationId: string) => {
+    const shots = props.annotations.flatMap((annotation, index) => {
+      const src = screenshotOf(annotation);
+      return src ? [{ id: annotation.id, src, name: titleOf(annotation, index) }] : [];
+    });
+    const index = shots.findIndex((shot) => shot.id === annotationId);
+    if (index < 0) return;
+    props.onExpandImage({ images: shots.map(({ src, name }) => ({ src, name })), index });
+  };
   return (
-    <div className="mb-2 flex">
+    <div className="group/annotations relative mb-2 inline-flex self-start">
       <Popover>
         <PopoverTrigger
           openOnHover
@@ -39,7 +61,17 @@ export function ComposerAnnotationsChip(props: {
           <MousePointerClickIcon data-g3-annotation-icon="" className="size-3.5" />
           {label}
         </PopoverTrigger>
-        <PopoverPopup side="top" align="start" sideOffset={6} padding="none" className="w-72">
+        <span className="absolute -top-1.5 -right-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/annotations:opacity-100">
+          <Button
+            variant="media-close"
+            size="icon-xs"
+            onClick={props.onRemoveAll}
+            aria-label={gt("Delete all annotations")}
+          >
+            <XIcon />
+          </Button>
+        </span>
+        <PopoverPopup side="top" align="start" sideOffset={6} padding="none" className="w-80">
           <div className="flex items-center justify-between py-1.5 pr-1.5 pl-3">
             <span className="font-medium text-muted-foreground text-xs">{label}</span>
             <button
@@ -53,6 +85,7 @@ export function ComposerAnnotationsChip(props: {
           <ul className="max-h-72 overflow-y-auto px-1 pb-1">
             {props.annotations.map((annotation, index) => {
               const comment = annotation.comment.trim();
+              const screenshot = screenshotOf(annotation);
               return (
                 <li
                   key={annotation.id}
@@ -78,6 +111,20 @@ export function ComposerAnnotationsChip(props: {
                       {annotation.pageTitle?.trim() || annotation.pageUrl}
                     </p>
                   </div>
+                  {screenshot ? (
+                    <button
+                      type="button"
+                      aria-label={gt("Enlarge screenshot")}
+                      className="h-10 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-border bg-background"
+                      onClick={() => expand(annotation.id)}
+                    >
+                      <img
+                        src={screenshot}
+                        alt=""
+                        className="size-full object-cover object-top-left"
+                      />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     aria-label={gt("Delete annotation")}
