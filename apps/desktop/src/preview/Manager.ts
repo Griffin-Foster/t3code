@@ -4,6 +4,7 @@ import * as NodeZlib from "node:zlib";
 import {
   DesktopPreviewAnnotationVoiceEventSchema,
   DesktopPreviewRecordingInputSchema,
+  PreviewAnnotationMarkerActionSchema,
   DESKTOP_PREVIEW_RECORDING_CAPTURE_TRIGGER,
 } from "@t3tools/contracts";
 import type {
@@ -70,6 +71,7 @@ import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts"
 import {
   MENU_ACTION_CHANNEL,
   PREVIEW_ANNOTATION_VOICE_EVENT_CHANNEL,
+  PREVIEW_ANNOTATION_MARKER_ACTION_CHANNEL,
   PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL,
 } from "../ipc/channels.ts";
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
@@ -79,6 +81,8 @@ import {
   ANNOTATION_CAPTURED_CHANNEL,
   ANNOTATION_SEND_ENABLED_CHANNEL,
   ANNOTATION_VOICE_EVENT_CHANNEL,
+  ANNOTATION_MARKERS_CHANNEL,
+  ANNOTATION_MARKER_ACTION_CHANNEL,
   ANNOTATION_VOICE_STATE_CHANNEL,
   ANNOTATION_THEME_CHANNEL,
   CANCEL_PICK_CHANNEL,
@@ -422,6 +426,9 @@ interface PickSession {
 
 const decodeAnnotationVoiceEvent = Schema.decodeUnknownOption(
   DesktopPreviewAnnotationVoiceEventSchema,
+);
+const decodeAnnotationMarkerAction = Schema.decodeUnknownOption(
+  PreviewAnnotationMarkerActionSchema,
 );
 
 interface BrowserControlSession {
@@ -2327,6 +2334,19 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     });
   });
 
+  // g3code: only a running pick shows markers, so there is nothing to update without one.
+  const setAnnotationMarkers = Effect.fn("PreviewManager.setAnnotationMarkers")(function* (
+    tabId: string,
+    markers: ReadonlyArray<PreviewAnnotationMarker>,
+  ) {
+    const sessions = yield* Ref.get(pickSessionsRef);
+    if (!sessions.has(tabId)) return;
+    const wc = yield* requireWebContents(tabId);
+    yield* attempt({ operation: "setAnnotationMarkers", tabId, webContentsId: wc.id }, () =>
+      wc.send(ANNOTATION_MARKERS_CHANNEL, markers),
+    );
+  });
+
   // Voice state reaches a guest only while its pick session, by id, still owns the tab.
   const updateAnnotationVoice = Effect.fn("PreviewManager.updateAnnotationVoice")(function* (
     state: DesktopPreviewAnnotationVoiceState,
@@ -2357,6 +2377,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
           yield* attempt({ operation: "pickElement.cleanup", tabId, webContentsId: wc.id }, () => {
             wc.ipc.removeListener(ELEMENT_PICKED_CHANNEL, onMessage);
             wc.ipc.removeListener(ANNOTATION_VOICE_EVENT_CHANNEL, onVoiceEvent);
+            wc.ipc.removeListener(ANNOTATION_MARKER_ACTION_CHANNEL, onMarkerAction);
             wc.off("destroyed", onDestroyed);
             wc.off("did-start-navigation", onNavigated);
           }).pipe(Effect.ignore);
@@ -2483,6 +2504,24 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
             }),
           );
         };
+        // g3code: edits made from a marker go to the app, which owns the annotations.
+        const onMarkerAction = (_event: Electron.IpcMainEvent, value: unknown) => {
+          const decoded = decodeAnnotationMarkerAction(value);
+          if (settled || Option.isNone(decoded)) return;
+          runFork(
+            Effect.gen(function* () {
+              const window = yield* Ref.get(mainWindowRef);
+              if (Option.isNone(window) || window.value.isDestroyed()) return;
+              yield* attempt({ operation: "annotationMarkerAction.forward", tabId }, () =>
+                window.value.webContents.send(
+                  PREVIEW_ANNOTATION_MARKER_ACTION_CHANNEL,
+                  tabId,
+                  decoded.value,
+                ),
+              ).pipe(Effect.ignore);
+            }),
+          );
+        };
         const onDestroyed = () => settle(null);
         const onNavigated = (
           event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>,
@@ -2503,6 +2542,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
           yield* attempt({ operation: "pickElement.register", tabId, webContentsId: wc.id }, () => {
             wc.ipc.on(ELEMENT_PICKED_CHANNEL, onMessage);
             if (voice) wc.ipc.on(ANNOTATION_VOICE_EVENT_CHANNEL, onVoiceEvent);
+            wc.ipc.on(ANNOTATION_MARKER_ACTION_CHANNEL, onMarkerAction);
             wc.once("destroyed", onDestroyed);
             wc.on("did-start-navigation", onNavigated);
             if (!wc.isFocused()) wc.focus();
@@ -3778,6 +3818,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     saveRecording,
     setAnnotationTheme,
     setAnnotationSendEnabled,
+    setAnnotationMarkers,
     setAudioMuted,
     setShown,
     setCaptureDrawn,
@@ -4025,6 +4066,10 @@ export class PreviewManager extends Context.Service<
     readonly updateAnnotationVoice: (
       state: DesktopPreviewAnnotationVoiceState,
     ) => Effect.Effect<void, PreviewManagerError>;
+    readonly setAnnotationMarkers: (
+      tabId: string,
+      markers: ReadonlyArray<PreviewAnnotationMarker>,
+    ) => Effect.Effect<void, PreviewManagerError>;
     readonly cancelPickElement: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
     readonly captureScreenshot: (
       tabId: string,
@@ -4194,6 +4239,7 @@ export const make = Effect.gen(function* PreviewManagerMake() {
     setAnnotationSendEnabled: operations.setAnnotationSendEnabled,
     pickElement: operations.pickElement,
     updateAnnotationVoice: operations.updateAnnotationVoice,
+    setAnnotationMarkers: operations.setAnnotationMarkers,
     cancelPickElement: operations.cancelPickElement,
     captureScreenshot: operations.captureScreenshot,
     revealArtifact: operations.revealArtifact,

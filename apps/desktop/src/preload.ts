@@ -1,6 +1,7 @@
 import type {
   DesktopBridge,
   DesktopPreviewAnnotationVoiceEvent,
+  PreviewAnnotationMarkerAction,
   DesktopPreviewFindResultEvent,
   DesktopPreviewOpenLinkEvent,
   DesktopPreviewPointerEvent,
@@ -498,6 +499,17 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IpcChannels.PREVIEW_PICK_ELEMENT_CHANNEL, { tabId, voice, markers }),
     cancelPickElement: (tabId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_CANCEL_PICK_ELEMENT_CHANNEL, { tabId }),
+    setAnnotationMarkers: (tabId, markers) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_SET_ANNOTATION_MARKERS_CHANNEL, { tabId, markers }),
+    onAnnotationMarkerAction: (listener) => {
+      // Main decoded the action before forwarding it.
+      const onAction = (_event: Electron.IpcRendererEvent, tabId: unknown, value: unknown) => {
+        if (typeof tabId !== "string" || typeof value !== "object" || value === null) return;
+        listener(tabId, value as PreviewAnnotationMarkerAction);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_ANNOTATION_MARKER_ACTION_CHANNEL, onAction);
+      return () => ipcRenderer.off(IpcChannels.PREVIEW_ANNOTATION_MARKER_ACTION_CHANNEL, onAction);
+    },
     captureScreenshot: (tabId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_CAPTURE_SCREENSHOT_CHANNEL, { tabId }),
     revealArtifact: (path) =>

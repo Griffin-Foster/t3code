@@ -732,6 +732,12 @@ interface ComposerDraftStoreState {
     annotations: ReadonlyArray<PreviewAnnotationPayload>,
   ) => void;
   removePreviewAnnotation: (threadRef: ComposerThreadTarget, annotationId: string) => void;
+  /** g3code: changes a saved annotation's comment (edited from its marker on the page). */
+  updatePreviewAnnotationComment: (
+    threadRef: ComposerThreadTarget,
+    annotationId: string,
+    comment: string,
+  ) => void;
   setReplyTo: (threadRef: ComposerThreadTarget, response: ResponseContextRecord | null) => void;
   addReviewComment: (
     threadRef: ComposerThreadTarget,
@@ -4154,6 +4160,23 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             if (shouldRemoveDraft(nextDraft)) delete nextDraftsByThreadKey[threadKey];
             else nextDraftsByThreadKey[threadKey] = nextDraft;
             return { draftsByThreadKey: nextDraftsByThreadKey };
+          });
+        },
+        updatePreviewAnnotationComment: (threadRef, annotationId, comment) => {
+          const threadKey = resolveComposerDraftKey(get(), threadRef);
+          if (!threadKey) return;
+          set((state) => {
+            const current = state.draftsByThreadKey[threadKey];
+            if (!current?.previewAnnotations.some((entry) => entry.id === annotationId)) {
+              return state;
+            }
+            const nextDraft = {
+              ...current,
+              previewAnnotations: current.previewAnnotations.map((entry) =>
+                entry.id === annotationId ? { ...entry, comment } : entry,
+              ),
+            };
+            return { draftsByThreadKey: { ...state.draftsByThreadKey, [threadKey]: nextDraft } };
           });
         },
         addReviewComment: (threadRef, comment, options) => {

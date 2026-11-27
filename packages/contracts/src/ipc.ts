@@ -1347,6 +1347,26 @@ export const PreviewAnnotationMarkerSchema = Schema.Struct({
 });
 export type PreviewAnnotationMarker = typeof PreviewAnnotationMarkerSchema.Type;
 
+/** g3code: an edit to a saved annotation made from its marker on the page. */
+export const PreviewAnnotationMarkerActionSchema = Schema.Union([
+  Schema.Struct({
+    action: Schema.Literal("update"),
+    id: Schema.String.check(Schema.isMaxLength(128)),
+    comment: Schema.String.check(Schema.isMaxLength(20_000)),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("delete"),
+    id: Schema.String.check(Schema.isMaxLength(128)),
+  }),
+]);
+export type PreviewAnnotationMarkerAction = typeof PreviewAnnotationMarkerActionSchema.Type;
+
+/** g3code: replaces the markers shown by a running pick, e.g. after one is deleted in the app. */
+export const DesktopPreviewSetAnnotationMarkersInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  markers: Schema.Array(PreviewAnnotationMarkerSchema).check(Schema.isMaxLength(200)),
+});
+
 export const DesktopPreviewPickElementInputSchema = Schema.Struct({
   tabId: DesktopPreviewTabIdSchema,
   voice: Schema.optional(DesktopPreviewAnnotationVoiceConfigSchema),
@@ -1424,6 +1444,15 @@ export interface DesktopPreviewBridge {
     markers?: ReadonlyArray<PreviewAnnotationMarker>,
   ) => Promise<PreviewAnnotationSubmissionResult | null>;
   cancelPickElement: (tabId: string) => Promise<void>;
+  /** g3code: replaces the markers on the page while a pick is running. */
+  setAnnotationMarkers: (
+    tabId: string,
+    markers: ReadonlyArray<PreviewAnnotationMarker>,
+  ) => Promise<void>;
+  /** g3code: a saved annotation was edited or deleted from its marker on the page. */
+  onAnnotationMarkerAction: (
+    listener: (tabId: string, action: PreviewAnnotationMarkerAction) => void,
+  ) => () => void;
   captureScreenshot: (
     tabId: string,
   ) => Promise<DesktopPreviewScreenshotArtifact | PreviewCaptureFailureEncoded>;

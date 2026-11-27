@@ -1,5 +1,6 @@
 import {
   DesktopPreviewAnnotationSendEnabledInputSchema,
+  DesktopPreviewSetAnnotationMarkersInputSchema,
   DesktopPreviewAnnotationThemeInputSchema,
   DesktopPreviewAnnotationVoiceStateSchema,
   DesktopPreviewPickElementInputSchema,
@@ -503,6 +504,16 @@ const setAnnotationSendEnabled = DesktopIpc.makeIpcMethod({
   }),
 });
 
+const setAnnotationMarkers = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_SET_ANNOTATION_MARKERS_CHANNEL,
+  payload: DesktopPreviewSetAnnotationMarkersInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.setAnnotationMarkers")(function* ({ tabId, markers }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.setAnnotationMarkers(tabId, markers);
+  }),
+});
+
 export const captureScreenshot = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_CAPTURE_SCREENSHOT_CHANNEL,
   payload: DesktopPreviewTabInputSchema,
@@ -578,6 +589,7 @@ export const methods = [
   sharesLoopback,
   setAnnotationTheme,
   setAnnotationSendEnabled,
+  setAnnotationMarkers,
   pickElement,
   cancelPickElement,
   captureScreenshot,

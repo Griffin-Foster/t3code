@@ -988,6 +988,34 @@ export function PreviewView({
       .catch(() => undefined);
   }, [canSendAnnotation, pickActive, runtimeTabId]);
 
+  const currentAnnotationMarkers = useEffectEvent(() => annotationMarkers());
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- g3code: keeps the page's markers in step with the draft's annotations (deleted or edited in the app) while a pick runs, and applies edits made from a marker on the page
+  useEffect(() => {
+    if (!pickActive || !previewBridge || !runtimeTabId) return;
+    const bridge = previewBridge;
+    const annotationsOf = (state: ReturnType<typeof useComposerDraftStore.getState>) =>
+      state.getComposerDraft(threadRef)?.previewAnnotations;
+    let last = annotationsOf(useComposerDraftStore.getState());
+    const unsubscribeStore = useComposerDraftStore.subscribe((state) => {
+      const next = annotationsOf(state);
+      if (next === last) return;
+      last = next;
+      void bridge
+        .setAnnotationMarkers(runtimeTabId, currentAnnotationMarkers())
+        .catch(() => undefined);
+    });
+    const unsubscribeActions = bridge.onAnnotationMarkerAction((tabId, action) => {
+      if (tabId !== runtimeTabId) return;
+      const store = useComposerDraftStore.getState();
+      if (action.action === "delete") store.removePreviewAnnotation(threadRef, action.id);
+      else store.updatePreviewAnnotationComment(threadRef, action.id, action.comment);
+    });
+    return () => {
+      unsubscribeStore();
+      unsubscribeActions();
+    };
+  }, [pickActive, runtimeTabId, threadRef]);
+
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- cancels an in-progress element pick on the preview bridge when the tab changes or on unmount
   useEffect(() => {
     return () => {

@@ -34,6 +34,8 @@ import { installRecordingCursor } from "./RecordingCursor.ts";
 import { DEFAULT_RECORDING_INPUT_OPTIONS } from "./RecordingInput.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
+  ANNOTATION_MARKER_ACTION_CHANNEL,
+  ANNOTATION_MARKERS_CHANNEL,
   ANNOTATION_SEND_ENABLED_CHANNEL,
   ANNOTATION_THEME_CHANNEL,
   ANNOTATION_VOICE_EVENT_CHANNEL,
@@ -195,6 +197,38 @@ const applyAnnotationTheme = (
     host.style.setProperty(name, value);
   }
 };
+
+/**
+ * g3code: the comment box, edit box and hover card are dark on every page, like the Codex app's,
+ * so they re-point the theme variables their classes use.
+ */
+const CODEX_DARK_VARIABLES: Record<string, string> = {
+  "--t3-background": "#212121",
+  "--t3-foreground": "#f4f4f4",
+  "--t3-popover": "#2a2a2a",
+  "--t3-popover-foreground": "#f4f4f4",
+  "--t3-muted": "rgb(255 255 255 / 0.08)",
+  "--t3-muted-foreground": "rgb(255 255 255 / 0.55)",
+  "--t3-accent": "rgb(255 255 255 / 0.1)",
+  "--t3-accent-foreground": "#ffffff",
+  "--t3-border": "rgb(255 255 255 / 0.1)",
+  "--t3-input": "rgb(255 255 255 / 0.14)",
+};
+const applyCodexDark = (element: HTMLElement): void => {
+  element.style.colorScheme = "dark";
+  for (const [name, value] of Object.entries(CODEX_DARK_VARIABLES)) {
+    element.style.setProperty(name, value);
+  }
+};
+
+const ICON_SLIDERS =
+  '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M3.5 6.5h7M14.5 6.5h2M3.5 13.5h2M9.5 13.5h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12.5" cy="6.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="13.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+const ICON_ARROW_UP =
+  '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M10 15.5v-11M5 9.5l5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_SPINNER =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" class="animate-spin"><path d="M12 3a9 9 0 1 0 9 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const ICON_TRASH =
+  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
 
 const reportHumanPointerInput = (event: PointerEvent): void => {
   if (!event.isTrusted) return;
@@ -608,7 +642,10 @@ function placeMarkerBubble(bubble: HTMLElement, point: PreviewAnnotationPoint): 
  * bubble's point sits where the annotation was clicked (an offset from its element, re-found by
  * selector), so markers follow scrolls and resizes.
  */
-function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>) {
+function createAnnotationMarkers(
+  initialMarkers: ReadonlyArray<PreviewAnnotationMarker>,
+  onSelect: (marker: PreviewAnnotationMarker, bubble: HTMLElement) => void,
+) {
   const element = document.createElement("div");
   element.setAttribute(OVERLAY_ATTRIBUTE, "");
   element.style.cssText = "position:fixed;inset:0;pointer-events:none;overflow:hidden";
@@ -621,35 +658,65 @@ function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>
       return false;
     }
   };
-  // Hovering a marker shows its annotation's comment.
+  // Hovering a marker shows its comment in a dark pill beside it, like the Codex app.
   const card = document.createElement("div");
   card.setAttribute(OVERLAY_ATTRIBUTE, "");
-  card.className =
-    "rounded-xl border border-border bg-popover/96 text-popover-foreground shadow-2xl backdrop-blur-xl";
-  card.style.cssText =
-    "position:absolute;left:0;top:0;display:none;max-width:min(280px,calc(100vw - 16px));padding:8px 10px;box-sizing:border-box;font:400 13px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none";
+  card.style.cssText = [
+    "position:absolute",
+    "left:0",
+    "top:0",
+    "display:none",
+    "max-width:min(300px,calc(100vw - 16px))",
+    "padding:9px 16px",
+    "box-sizing:border-box",
+    "border-radius:20px",
+    "background:#2a2a2a",
+    "color:#f4f4f4",
+    "font:500 14px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif",
+    "box-shadow:0 6px 20px rgb(0 0 0 / 0.28)",
+    "white-space:pre-wrap",
+    "overflow-wrap:anywhere",
+    "pointer-events:none",
+  ].join(";");
+  let cardSuppressed = false;
+  const hideCard = (): void => {
+    card.style.display = "none";
+  };
   const showCard = (bubble: HTMLElement, comment: string): void => {
+    if (cardSuppressed) return;
     card.textContent = comment.trim() || "No comment";
     card.style.display = "block";
     const box = bubble.getBoundingClientRect();
     const width = card.offsetWidth;
     const height = card.offsetHeight;
-    const x = Math.min(Math.max(box.right + 6, 8), window.innerWidth - width - 8);
-    const above = box.top - height - 6;
-    const y = above >= 8 ? above : Math.min(box.bottom + 6, window.innerHeight - height - 8);
+    const x = Math.min(Math.max(box.right + 4, 8), window.innerWidth - width - 8);
+    const y = Math.min(Math.max(box.bottom - height / 2, 8), window.innerHeight - height - 8);
     card.style.transform = `translate(${x}px, ${y}px)`;
   };
-  const items = markers
-    .filter((marker) => samePage(marker.pageUrl))
-    .map((marker) => {
-      const bubble = createMarkerBubble(marker.label);
-      bubble.addEventListener("pointerenter", () => showCard(bubble, marker.comment ?? ""));
-      bubble.addEventListener("pointerleave", () => {
-        card.style.display = "none";
+  let items: { marker: PreviewAnnotationMarker; bubble: HTMLDivElement }[] = [];
+  const build = (markers: ReadonlyArray<PreviewAnnotationMarker>): void => {
+    for (const { bubble } of items) bubble.remove();
+    hideCard();
+    items = markers
+      .filter((marker) => samePage(marker.pageUrl))
+      .map((marker) => {
+        const bubble = createMarkerBubble(marker.label);
+        bubble.style.cursor = "pointer";
+        bubble.title = "";
+        bubble.addEventListener("pointerenter", () => showCard(bubble, marker.comment ?? ""));
+        bubble.addEventListener("pointerleave", hideCard);
+        bubble.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0 || !event.isTrusted) return;
+          event.preventDefault();
+          event.stopPropagation();
+          hideCard();
+          onSelect(marker, bubble);
+        });
+        element.insertBefore(bubble, card);
+        return { marker, bubble };
       });
-      element.appendChild(bubble);
-      return { marker, bubble };
-    });
+    position();
+  };
   element.appendChild(card);
   const position = (): void => {
     for (const { marker, bubble } of items) {
@@ -673,8 +740,18 @@ function createAnnotationMarkers(markers: ReadonlyArray<PreviewAnnotationMarker>
       );
     }
   };
-  position();
-  return { element, position };
+  build(initialMarkers);
+  return {
+    element,
+    position,
+    update: build,
+    count: () => items.length,
+    /** Hides the hover card while an edit box is open. */
+    suppressCard: (suppressed: boolean) => {
+      cardSuppressed = suppressed;
+      if (suppressed) hideCard();
+    },
+  };
 }
 
 function startAnnotation(
@@ -711,7 +788,11 @@ function startAnnotation(
 
   const hoverOutline = createBox(PRIMARY, PRIMARY_FILL);
   const marqueeBox = createBox(PRIMARY, PRIMARY_FILL);
-  const markerLayer = createAnnotationMarkers(markers);
+  // Clicking a saved marker opens its edit box (set up below, once the overlay exists).
+  let openMarkerEditor: (marker: PreviewAnnotationMarker, bubble: HTMLElement) => void = () => {};
+  const markerLayer = createAnnotationMarkers(markers, (marker, bubble) =>
+    openMarkerEditor(marker, bubble),
+  );
   root.append(markerLayer.element, hoverOutline, marqueeBox);
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -733,28 +814,29 @@ function startAnnotation(
   const editor = document.createElement("div");
   editor.setAttribute(OVERLAY_ATTRIBUTE, "");
   editor.className =
-    "pointer-events-auto fixed hidden max-h-[calc(100vh-16px)] w-[min(360px,calc(100vw-16px))] flex-col overflow-hidden rounded-xl border border-border bg-popover/96 text-popover-foreground shadow-2xl backdrop-blur-xl";
+    "pointer-events-auto fixed hidden max-h-[calc(100vh-16px)] w-[min(380px,calc(100vw-16px))] flex-col overflow-hidden rounded-[24px] border border-border bg-popover text-popover-foreground shadow-2xl";
   editor.style.zIndex = String(CHROME_LAYER_Z_INDEX);
+  applyCodexDark(editor);
   root.appendChild(editor);
 
   const composerRow = document.createElement("div");
-  composerRow.className = "flex items-start gap-2 p-2";
+  composerRow.className = "flex items-end gap-0.5 p-1.5";
 
   const adjust = createButton("", "Expand annotation editor");
   adjust.setAttribute("aria-label", "Expand annotation editor");
   adjust.setAttribute("aria-expanded", "false");
   adjust.className +=
-    " h-8 w-8 shrink-0 bg-muted p-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground";
-  adjust.innerHTML =
-    '<svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12M7 3v4M13 8v4M9 13v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+    " h-9 w-9 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground";
+  adjust.classList.remove("rounded-md");
+  adjust.innerHTML = ICON_SLIDERS;
   composerRow.appendChild(adjust);
 
   const comment = document.createElement("textarea");
-  comment.placeholder = "Describe the change…";
+  comment.placeholder = "Add a comment…";
   comment.setAttribute("dir", "auto");
   comment.rows = 1;
   comment.className =
-    "min-h-8 max-h-24 min-w-0 flex-1 resize-none overflow-y-hidden border-0 border-b border-b-transparent bg-transparent px-0 py-1.5 font-sans text-sm leading-5 text-foreground outline-none ring-0 placeholder:text-muted-foreground focus:border-b-primary focus:outline-none focus:ring-0";
+    "min-h-9 max-h-24 min-w-0 flex-1 resize-none overflow-y-hidden border-0 bg-transparent px-1.5 py-2 font-sans text-[15px] leading-5 text-foreground outline-none ring-0 placeholder:text-muted-foreground focus:outline-none focus:ring-0";
   composerRow.appendChild(comment);
 
   // Recording happens in the application renderer, which owns the microphone consent.
@@ -769,7 +851,8 @@ function startAnnotation(
   const voiceButton = createButton("", "Start voice input");
   voiceButton.innerHTML =
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>';
-  voiceButton.className += " h-8 w-8 shrink-0 p-0 text-muted-foreground";
+  voiceButton.className += " h-9 w-9 shrink-0 rounded-full p-0 text-muted-foreground";
+  voiceButton.classList.remove("rounded-md");
   voiceButton.hidden = true;
   voiceButton.setAttribute("aria-label", "Start voice input");
   composerRow.appendChild(voiceButton);
@@ -896,6 +979,7 @@ function startAnnotation(
       comment.value = state.draft.text;
       comment.setSelectionRange(state.draft.cursor, state.draft.cursor);
       resizeComment();
+      refreshSubmitLook();
     }
     const recording = state.phase === "recording";
     const active = state.phase !== "idle" && state.phase !== "error";
@@ -984,15 +1068,26 @@ function startAnnotation(
     "hidden h-8 w-6 shrink-0 cursor-grab select-none border-0 bg-transparent p-0 font-sans text-lg font-bold leading-5 text-muted-foreground";
   composerRow.appendChild(dragHandle);
 
-  const submit = createButton("Attach", "Attach annotation and screenshot (Enter)");
+  const submit = createButton("", "Attach annotation and screenshot (Enter)");
+  submit.setAttribute("aria-label", "Attach annotation");
+  submit.innerHTML = ICON_ARROW_UP;
   const updateSendHint = () => {
     submit.title = sendEnabled
       ? "Attach annotation and screenshot (Enter). Send with Cmd/Ctrl+Enter."
       : "Attach annotation and screenshot (Enter)";
   };
   updateSendHint();
-  submit.className +=
-    " h-8 shrink-0 border-primary bg-primary px-3 text-primary-foreground shadow-sm hover:bg-primary/90";
+  submit.className += " h-9 w-9 shrink-0 rounded-full p-0 transition-colors";
+  submit.classList.remove("rounded-md", "hover:bg-accent", "text-foreground");
+  // Grey until there is a comment, then white, like the Codex app's send button.
+  const refreshSubmitLook = (): void => {
+    const ready = comment.value.trim() !== "";
+    submit.classList.toggle("bg-white", ready);
+    submit.classList.toggle("text-neutral-900", ready);
+    submit.classList.toggle("bg-neutral-500", !ready);
+    submit.classList.toggle("text-neutral-800", !ready);
+  };
+  refreshSubmitLook();
   composerRow.appendChild(submit);
   editor.append(composerRow, voicePreview, voiceRow);
 
@@ -1032,7 +1127,8 @@ function startAnnotation(
   // there, and the point is saved as an offset from the first target so its marker follows it.
   let clickPoint: PreviewAnnotationPoint | null = null;
   let clickOffset: PreviewAnnotationPoint | null = null;
-  const pendingBubble = createMarkerBubble(String(markers.length + 1));
+  // Blank while the comment is written, like the Codex app; it gets its number once saved.
+  const pendingBubble = createMarkerBubble("");
   pendingBubble.style.display = "none";
   markerLayer.element.appendChild(pendingBubble);
   const hasAnyTargets = (): boolean =>
@@ -1070,6 +1166,7 @@ function startAnnotation(
   };
   comment.addEventListener("input", () => {
     resizeComment();
+    refreshSubmitLook();
     sendVoice("sync");
   });
 
@@ -1578,9 +1675,144 @@ function startAnnotation(
   dragHandle.addEventListener("pointerup", onEditorPointerUp);
   dragHandle.addEventListener("pointercancel", onEditorPointerUp);
 
+  // g3code: clicking a saved marker opens this edit box beside it, like the Codex app: the comment
+  // prefilled, with delete, Cancel and Save. Changes go to the app, which owns the annotations and
+  // sends back the updated markers.
+  const markerEditor = document.createElement("div");
+  markerEditor.setAttribute(OVERLAY_ATTRIBUTE, "");
+  markerEditor.className =
+    "pointer-events-auto fixed hidden w-[min(380px,calc(100vw-16px))] flex-col gap-1 rounded-[24px] border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl";
+  markerEditor.style.zIndex = String(CHROME_LAYER_Z_INDEX + 1);
+  applyCodexDark(markerEditor);
+  const markerEditorTop = document.createElement("div");
+  markerEditorTop.className = "flex items-start gap-0.5";
+  const markerEditorIcon = document.createElement("span");
+  markerEditorIcon.className =
+    "flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground";
+  markerEditorIcon.innerHTML = ICON_SLIDERS;
+  const markerComment = document.createElement("textarea");
+  markerComment.rows = 1;
+  markerComment.placeholder = "Add a comment…";
+  markerComment.setAttribute("dir", "auto");
+  markerComment.className =
+    "min-h-9 max-h-32 min-w-0 flex-1 resize-none overflow-y-hidden border-0 bg-transparent px-1.5 py-2 font-sans text-[15px] leading-5 text-foreground outline-none ring-0 placeholder:text-muted-foreground focus:outline-none focus:ring-0";
+  markerEditorTop.append(markerEditorIcon, markerComment);
+  const markerEditorActions = document.createElement("div");
+  markerEditorActions.className = "flex items-center gap-2";
+  const markerDelete = createButton("", "Delete annotation");
+  markerDelete.setAttribute("aria-label", "Delete annotation");
+  markerDelete.innerHTML = ICON_TRASH;
+  markerDelete.className += " h-9 w-9 rounded-full p-0 text-muted-foreground hover:text-foreground";
+  markerDelete.classList.remove("rounded-md");
+  const markerSpacer = document.createElement("span");
+  markerSpacer.className = "flex-1";
+  const markerCancel = createButton("Cancel", "Cancel (Esc)");
+  markerCancel.className +=
+    " h-9 rounded-full border-border px-4 text-sm font-normal text-foreground hover:bg-accent";
+  markerCancel.classList.remove("rounded-md", "border-transparent", "text-xs", "font-medium");
+  const markerSave = createButton("Save", "Save (Enter)");
+  markerSave.className +=
+    " h-9 rounded-full bg-white px-4 text-sm text-neutral-900 hover:bg-neutral-200";
+  markerSave.classList.remove("rounded-md", "text-foreground", "hover:bg-accent", "text-xs");
+  markerEditorActions.append(markerDelete, markerSpacer, markerCancel, markerSave);
+  markerEditor.append(markerEditorTop, markerEditorActions);
+  root.appendChild(markerEditor);
+  let editingMarker: { marker: PreviewAnnotationMarker; bubble: HTMLElement } | null = null;
+  const resizeMarkerComment = (): void => {
+    markerComment.style.height = "auto";
+    markerComment.style.height = `${Math.min(markerComment.scrollHeight, 128)}px`;
+    markerComment.style.overflowY = markerComment.scrollHeight > 128 ? "auto" : "hidden";
+  };
+  const positionMarkerEditor = (): void => {
+    if (!editingMarker) return;
+    const box = editingMarker.bubble.getBoundingClientRect();
+    const width = markerEditor.offsetWidth;
+    const height = markerEditor.offsetHeight;
+    const right = box.right + 4;
+    const left = right + width <= window.innerWidth - 8 ? right : box.left - width - 4;
+    markerEditor.style.left = `${Math.min(Math.max(left, 8), window.innerWidth - width - 8)}px`;
+    markerEditor.style.top = `${Math.min(Math.max(box.top - 6, 8), window.innerHeight - height - 8)}px`;
+  };
+  const closeMarkerEditor = (): void => {
+    if (!editingMarker) return;
+    editingMarker = null;
+    markerEditor.style.display = "none";
+    markerLayer.suppressCard(false);
+  };
+  openMarkerEditor = (marker, bubble) => {
+    editingMarker = { marker, bubble };
+    markerLayer.suppressCard(true);
+    markerComment.value = marker.comment ?? "";
+    markerEditor.style.display = "flex";
+    resizeMarkerComment();
+    positionMarkerEditor();
+    window.setTimeout(() => {
+      markerComment.focus({ preventScroll: true });
+      markerComment.setSelectionRange(markerComment.value.length, markerComment.value.length);
+    }, 0);
+  };
+  const sendMarkerAction = (
+    action: { action: "update"; id: string; comment: string } | { action: "delete"; id: string },
+  ): void => {
+    ipcRenderer.send(ANNOTATION_MARKER_ACTION_CHANNEL, action);
+  };
+  const saveMarkerEdit = (): void => {
+    if (!editingMarker) return;
+    const { marker } = editingMarker;
+    const next = markerComment.value.trim();
+    if (next !== (marker.comment ?? "").trim()) {
+      sendMarkerAction({ action: "update", id: marker.id, comment: next });
+    }
+    closeMarkerEditor();
+  };
+  const deleteMarker = (): void => {
+    if (!editingMarker) return;
+    const { marker, bubble } = editingMarker;
+    bubble.remove();
+    sendMarkerAction({ action: "delete", id: marker.id });
+    closeMarkerEditor();
+  };
+  markerComment.addEventListener("input", resizeMarkerComment);
+  markerSave.addEventListener("click", (event) => {
+    if (event.isTrusted) saveMarkerEdit();
+  });
+  markerCancel.addEventListener("click", (event) => {
+    if (event.isTrusted) closeMarkerEditor();
+  });
+  markerDelete.addEventListener("click", (event) => {
+    if (event.isTrusted) deleteMarker();
+  });
+  /** Enter saves and Esc cancels while the edit box is open; true when the key was handled. */
+  const handleMarkerEditorKey = (event: KeyboardEvent): boolean => {
+    if (!editingMarker || event.type !== "keydown" || event.isComposing) return false;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMarkerEditor();
+      return true;
+    }
+    if (shadowRoot.activeElement !== markerComment) return false;
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      saveMarkerEdit();
+    }
+    // Other keys type into the box rather than switching tools.
+    return true;
+  };
+  const onMarkersUpdated = (_event: Electron.IpcRendererEvent, next: unknown): void => {
+    if (!Array.isArray(next)) return;
+    const markersNext = next as ReadonlyArray<PreviewAnnotationMarker>;
+    if (editingMarker && !markersNext.some((marker) => marker.id === editingMarker?.marker.id)) {
+      closeMarkerEditor();
+    }
+    markerLayer.update(markersNext);
+  };
+
   const repaint = (): void => {
     for (const target of selected.values()) updateSelectedVisual(target);
     markerLayer.position();
+    positionMarkerEditor();
     placePendingBubble();
     queueEditorLayout();
   };
@@ -1710,6 +1942,11 @@ function startAnnotation(
     if (event.button !== 0 || isAnnotationNode(event.target as Element)) return;
     event.preventDefault();
     event.stopPropagation();
+    // A click on the page while editing a saved annotation just closes its edit box.
+    if (editingMarker) {
+      closeMarkerEditor();
+      return;
+    }
     if (tool !== "erase" && !hasAnyTargets()) clickPoint = { x: event.clientX, y: event.clientY };
     if (tool === "select") {
       const target = pickFromPoint(event.clientX, event.clientY);
@@ -1871,6 +2108,7 @@ function startAnnotation(
     if (editorLayoutFrame !== null) window.cancelAnimationFrame(editorLayoutFrame);
     ipcRenderer.off(CANCEL_PICK_CHANNEL, onCancel);
     ipcRenderer.off(ANNOTATION_CAPTURED_CHANNEL, onCaptured);
+    ipcRenderer.off(ANNOTATION_MARKERS_CHANNEL, onMarkersUpdated);
     ipcRenderer.off(ANNOTATION_VOICE_STATE_CHANNEL, onVoiceState);
     if (elapsedTimer !== null) clearInterval(elapsedTimer);
     document.documentElement.removeAttribute("data-t3code-annotation-tool");
@@ -1893,6 +2131,7 @@ function startAnnotation(
     sendVoice("key", event);
   };
   const onKeyDown = (event: KeyboardEvent): void => {
+    if (handleMarkerEditorKey(event)) return;
     // Only the keyboard drives dictation; a page cannot synthesize the chord or Escape.
     if (voice && event.isTrusted && !event.isComposing && event.keyCode !== 229) {
       if (event.key === "Escape" && voiceBusy) {
@@ -1938,6 +2177,7 @@ function startAnnotation(
     }
     comment.value = "";
     resizeComment();
+    refreshSubmitLook();
     updateStatus();
   };
 
@@ -1957,7 +2197,7 @@ function startAnnotation(
       return;
     pendingCapture = true;
     submit.disabled = true;
-    submit.textContent = "Capturing…";
+    submit.innerHTML = ICON_SPINNER;
     // Snapshot the submitted comment before context lookup lets the user edit it.
     const submittedComment = comment.value.trim();
     const submittedRegions = [...regions];
@@ -2021,6 +2261,7 @@ function startAnnotation(
     if (event.isTrusted) submitAnnotation("attach");
   });
   const handleOverlayKey = (event: KeyboardEvent): void => {
+    if (handleMarkerEditorKey(event) || (editingMarker && event.type === "keydown")) return;
     if (event.type === "keyup") onVoiceKeyUp(event);
     if (event.type !== "keydown") return;
     onKeyDown(event);
@@ -2049,6 +2290,7 @@ function startAnnotation(
   document.documentElement.addEventListener("focusout", onFocusOutToOverlay);
   ipcRenderer.on(CANCEL_PICK_CHANNEL, onCancel);
   ipcRenderer.on(ANNOTATION_CAPTURED_CHANNEL, onCaptured);
+  ipcRenderer.on(ANNOTATION_MARKERS_CHANNEL, onMarkersUpdated);
   if (voice) ipcRenderer.on(ANNOTATION_VOICE_STATE_CHANNEL, onVoiceState);
   if (inputLayer) {
     document.documentElement.appendChild(inputLayer);

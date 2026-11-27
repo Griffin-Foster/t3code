@@ -56,7 +56,7 @@ const pickAndAttach = async (element: Element) => {
     new PointerEvent("pointerdown", { button: 0, clientX: 100, clientY: 100, bubbles: true }),
   );
   const attach = Array.from(shadowRoot.querySelectorAll("button")).find(
-    (button) => button.textContent === "Attach",
+    (button) => button.getAttribute("aria-label") === "Attach annotation",
   );
   const listenerIndex = listeners.mock.contexts.findIndex(
     (target, index) => target === attach && listeners.mock.calls[index]?.[0] === "click",
@@ -172,7 +172,7 @@ it.each([
     card.replaceWith(document.createElement("div"));
     if (scrolled) window.dispatchEvent(new Event("scroll"));
     const attach = Array.from(shadowRoot.querySelectorAll("button")).find(
-      (button) => button.textContent === "Attach",
+      (button) => button.getAttribute("aria-label") === "Attach annotation",
     );
     if (!attach) throw new Error("Attach button not found");
     attach.click();

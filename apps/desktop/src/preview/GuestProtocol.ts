@@ -4,6 +4,9 @@ export const ELEMENT_PICKED_CHANNEL = "preview:element-picked";
 export const ANNOTATION_CAPTURED_CHANNEL = "preview:annotation-captured";
 export const ANNOTATION_THEME_CHANNEL = "preview:annotation-theme";
 export const ANNOTATION_SEND_ENABLED_CHANNEL = "preview:annotation-send-enabled";
+// g3code: main replaces the running pick's markers; the page reports edits made from a marker.
+export const ANNOTATION_MARKERS_CHANNEL = "preview:annotation-markers";
+export const ANNOTATION_MARKER_ACTION_CHANNEL = "preview:annotation-marker-action";
 export const HUMAN_INPUT_CHANNEL = "preview:human-input";
 // Sent to the hosting <webview> element (ipc-message). The web app mirrors this
 // literal in HostedBrowserWebview because it cannot import from the desktop app.
