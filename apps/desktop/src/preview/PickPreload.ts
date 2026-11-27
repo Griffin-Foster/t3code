@@ -2239,18 +2239,28 @@ function startAnnotation(
         editor.style.display = "none";
         toolbar.style.display = "none";
         hoverOutline.style.display = "none";
+        // g3code: the screenshot shows the page itself, so every overlay piece (selection boxes
+        // and labels, markers, the comment box) is hidden first; only lines drawn on the page stay.
+        root.style.visibility = "hidden";
+        svg.style.visibility = "visible";
         const screenshotRect = unionRects([
           ...elements.map((target) => target.rect),
           ...submittedRegions.map((region) => region.rect),
           ...submittedStrokes.map((stroke) => stroke.bounds),
         ]);
-        ipcRenderer.send(
-          ELEMENT_PICKED_CHANNEL,
-          annotation,
-          screenshotRect,
-          submission === "send" && !sendEnabled ? "attach" : submission,
-          // Main crops a viewport capture, whose pixels are CSS px × this.
-          window.devicePixelRatio,
+        // Two frames, so the hidden overlay has been painted before main captures the page.
+        window.requestAnimationFrame(() =>
+          window.requestAnimationFrame(() => {
+            if (finished) return;
+            ipcRenderer.send(
+              ELEMENT_PICKED_CHANNEL,
+              annotation,
+              screenshotRect,
+              submission === "send" && !sendEnabled ? "attach" : submission,
+              // Main crops a viewport capture, whose pixels are CSS px × this.
+              window.devicePixelRatio,
+            );
+          }),
         );
       })
       .catch(() => {
